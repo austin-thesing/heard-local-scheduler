@@ -29,6 +29,10 @@
       console.log("[HubSpot Router]", ...args);
     }
   }
+  
+  // Expose DEBUG flag for other scripts
+  window.HubSpotRouter = window.HubSpotRouter || {};
+  window.HubSpotRouter.DEBUG = DEBUG;
 
   // Ensure we only route once per page load
   let HAS_ROUTED = false;
@@ -178,20 +182,33 @@
    * Redirect to scheduler display page
    */
   function redirectToScheduler(formData, schedulerType) {
+    // Store sensitive data in sessionStorage
+    const routerData = {
+      scheduler_type: schedulerType,
+      formData: formData,
+      timestamp: Date.now(),
+      source: "hubspot_form",
+    };
+
+    try {
+      sessionStorage.setItem("scheduler_router_data", JSON.stringify(routerData));
+      log("Stored router data in sessionStorage");
+    } catch (e) {
+      log("Failed to store in sessionStorage, falling back to cookies");
+      // Fallback to cookie if sessionStorage fails
+      document.cookie = `scheduler_type=${schedulerType}; path=/; max-age=3600`;
+      // Base64 encode the form data to avoid issues with special characters
+      document.cookie = `form_data=${btoa(JSON.stringify(formData))}; path=/; max-age=3600`;
+    }
+
+    // Build minimal URL with only email visible
     const params = new URLSearchParams();
+    if (formData.email) {
+      params.set("email", formData.email);
+    }
 
-    // Add form data as URL parameters
-    Object.entries(formData).forEach(([key, value]) => {
-      if (value && typeof value === "string") {
-        params.set(key, value);
-      }
-    });
-
-    // Add scheduler type
-    params.set("scheduler_type", schedulerType);
-
-    // Redirect to scheduler display page
-    const redirectUrl = `scheduler-display.html?${params.toString()}`;
+    // Redirect to simplified scheduler display page with minimal query string
+    const redirectUrl = `scheduler-display-simple.html${params.toString() ? "?" + params.toString() : ""}`;
     log("Redirecting to:", redirectUrl);
     window.location.href = redirectUrl;
   }
@@ -224,6 +241,175 @@
         scheduler_type: schedulerType,
         method: "redirect",
       });
+    }
+  }
+
+  /**
+   * Monitor form inputs for developer embed forms
+   * Captures form data since developer embeds don't provide submission data
+   */
+  function initFormMonitoring() {
+    // Store captured form data globally
+    window._capturedFormData = window._capturedFormData || {};
+    // Track previous values to avoid duplicate logging
+    const previousValues = {};
+    // Track processed elements to avoid duplicate listeners
+    const processedElements = new WeakSet();
+    
+    // Function to capture the value
+    function captureValue(input, eventType = 'change') {
+      if (!input.name) return;
+      
+      let value = input.value;
+      const fieldKey = input.name;
+      
+      // Check if value actually changed
+      if (previousValues[fieldKey] === value) {
+        return; // Value hasn't changed, skip
+      }
+      previousValues[fieldKey] = value;
+      
+      // Skip HubSpot internal fields
+      if (fieldKey === 'hs_context' || fieldKey.startsWith('hs_') || fieldKey === 'guid') {
+        return; // Don't track or log HubSpot internal fields
+      }
+      
+      // Store the value
+      window._capturedFormData[fieldKey] = value;
+      
+      // Only log if there's an actual value
+      if (value) {
+        // Determine field type for better logging
+        let fieldType = input.type || input.tagName.toLowerCase();
+        
+        // Special handling for phone fields
+        if (input.type === 'tel' || fieldKey.toLowerCase().includes('phone')) {
+          // Also store clean version without formatting
+          const cleanPhone = value.replace(/[\s\-\(\)\.]/g, '');
+          if (cleanPhone) {
+            window._capturedFormData[fieldKey + '_clean'] = cleanPhone;
+          }
+          log('Captured phone:', fieldKey, '=', value);
+        }
+        // Check if it's a radio button based on type
+        else if (input.type === 'radio') {
+          log('Captured radio selection:', fieldKey, '=', value);
+        }
+        // Hidden inputs are often used for dropdowns in HubSpot
+        else if (input.type === 'hidden') {
+          // Skip hs_context and other HubSpot internal fields
+          if (fieldKey === 'hs_context' || fieldKey.startsWith('hs_') || fieldKey === 'guid') {
+            return; // Don't log HubSpot internal fields
+          }
+          // Check if this is actually a dropdown by looking for nearby dropdown elements
+          const parent = input.closest('.hsfc-DropdownField');
+          if (parent) {
+            log('Captured dropdown:', fieldKey, '=', value);
+          } else {
+            // Only log hidden fields that aren't HubSpot internal
+            log('Captured field:', fieldKey, '=', value);
+          }
+        }
+        else {
+          log('Captured', fieldType + ':', fieldKey, '=', value);
+        }
+      }
+    }
+    
+    // Monitor form inputs using MutationObserver
+    function monitorFormInputs() {
+      const observer = new MutationObserver((mutations) => {
+        // Process only new nodes, not all inputs every time
+        const addedNodes = [];
+        mutations.forEach(mutation => {
+          mutation.addedNodes.forEach(node => {
+            if (node.nodeType === 1) { // Element node
+              addedNodes.push(node);
+            }
+          });
+        });
+        
+        if (addedNodes.length === 0) return;
+        
+        // Find inputs in the newly added nodes
+        addedNodes.forEach(node => {
+          const inputs = node.querySelectorAll ? 
+            node.querySelectorAll('input[name], select[name], textarea[name]') : [];
+          
+          // Also check if the node itself is an input
+          if (node.tagName && (node.tagName === 'INPUT' || node.tagName === 'SELECT' || node.tagName === 'TEXTAREA') && node.name) {
+            processInput(node);
+          }
+          
+          inputs.forEach(input => processInput(input));
+        });
+      });
+      
+      function processInput(input) {
+        // Skip if already processed
+        if (processedElements.has(input)) return;
+        processedElements.add(input);
+        
+        // Skip readonly inputs UNLESS they're hidden
+        if (input.readOnly && input.type !== 'hidden') return;
+        
+        // For hidden inputs, monitor value changes directly
+        if (input.type === 'hidden' && input.name) {
+          // Use a simple interval check for hidden inputs (more reliable than property override)
+          let lastValue = input.value;
+          const checkInterval = setInterval(() => {
+            if (input.value !== lastValue) {
+              lastValue = input.value;
+              captureValue(input, 'programmatic');
+            }
+            // Stop checking if element is removed
+            if (!document.body.contains(input)) {
+              clearInterval(checkInterval);
+            }
+          }, 500); // Check every 500ms
+          
+          // Capture initial value
+          if (input.value) {
+            captureValue(input, 'initial');
+          }
+        }
+        // For radio buttons
+        else if (input.type === 'radio') {
+          input.addEventListener('change', () => captureValue(input));
+        }
+        // For phone inputs
+        else if (input.type === 'tel' || (input.name && input.name.toLowerCase().includes('phone'))) {
+          input.addEventListener('blur', () => captureValue(input));
+          input.addEventListener('change', () => captureValue(input));
+        }
+        // For other inputs
+        else {
+          input.addEventListener('change', () => captureValue(input));
+          input.addEventListener('blur', () => captureValue(input));
+          
+          // Capture initial value if present
+          if (input.value) {
+            captureValue(input, 'initial');
+          }
+        }
+      }
+      
+      // Process any existing inputs on page load
+      document.querySelectorAll('input[name], select[name], textarea[name]').forEach(processInput);
+      
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true
+      });
+      
+      log('Form input monitoring activated');
+    }
+    
+    // Start monitoring when DOM is ready
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', monitorFormInputs);
+    } else {
+      monitorFormInputs();
     }
   }
 
@@ -264,14 +450,25 @@
       const msgType = payload && (payload.type || payload.messageType);
       const eventName = payload && payload.eventName;
 
-      // Check for form submission event
+      // Check for standard form submission event
       if (payload && msgType === "hsFormCallback" && (eventName === "onFormSubmitted" || eventName === "onFormSubmit")) {
         const submissionData = payload.data;
         if (submissionData) {
           const normalized = normalizeFormData(submissionData);
           handleFormSubmission(normalized, options);
         }
-      } else if (payload && msgType === "hsFormCallback" && DEBUG) {
+      } 
+      // Check for developer embed submission (accepted: true)
+      else if (payload && payload.formGuid && payload.accepted === true) {
+        log('Developer embed submission detected');
+        log('Using captured form data:', window._capturedFormData);
+        
+        // Use captured form data for developer embeds
+        if (window._capturedFormData && Object.keys(window._capturedFormData).length > 0) {
+          handleFormSubmission(window._capturedFormData, options);
+        }
+      }
+      else if (payload && msgType === "hsFormCallback" && DEBUG) {
         // Helpful debug for other HS callbacks (ready, inlineMessage, etc.)
         log("Ignoring hsFormCallback event:", eventName);
       }
@@ -301,7 +498,12 @@
       log("Debug mode enabled. Access via window.HubSpotRouterDebug");
     }
 
+    // Initialize form monitoring for developer embeds
+    initFormMonitoring();
+    
+    // Initialize postMessage listener
     initPostMessageListener(config);
+    
     log("HubSpot Form Router initialized with config:", config);
   }
 
@@ -312,13 +514,15 @@
     init();
   }
 
-  // Expose public API
+  // Expose public API (merge with existing if already defined)
   window.HubSpotRouter = {
+    ...window.HubSpotRouter,
     init,
     handleFormSubmission,
     determineSchedulerType,
     buildSchedulerUrl,
     config: SCHEDULER_CONFIG,
+    DEBUG: DEBUG,
   };
 
   log("HubSpot Form Router loaded");
