@@ -97,8 +97,8 @@
     // Pre-fill common fields
     const fieldMappings = {
       email: ["email", "email_address"],
-      firstName: ["firstname", "first_name", "fname"],
-      lastName: ["lastname", "last_name", "lname"],
+      firstname: ["firstname", "first_name", "fname"],
+      lastname: ["lastname", "last_name", "lname"],
       company: ["company", "practice_name", "business_name"],
       phone: ["phone", "phone_number", "telephone"],
     };
