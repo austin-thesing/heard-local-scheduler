@@ -96,11 +96,11 @@
 
     // Pre-fill common fields
     const fieldMappings = {
-      email: ["email", "email_address"],
-      firstname: ["firstname", "first_name", "fname"],
-      lastname: ["lastname", "last_name", "lname"],
-      company: ["company", "practice_name", "business_name"],
-      phone: ["phone", "phone_number", "telephone"],
+      email: ["email", "email_address", "0-1/email", "0-2/email"],
+      firstname: ["firstname", "first_name", "fname", "0-1/firstname", "0-2/firstname"],
+      lastname: ["lastname", "last_name", "lname", "0-1/lastname", "0-2/lastname"],
+      company: ["company", "practice_name", "business_name", "0-1/company", "0-2/company"],
+      phone: ["phone", "phone_number", "telephone", "0-1/phone", "0-2/phone"],
     };
 
     Object.entries(fieldMappings).forEach(([paramName, fieldNames]) => {
@@ -123,9 +123,20 @@
     ];
 
     additionalFields.forEach(fieldName => {
+      // Check for exact field name first
       if (formData[fieldName]) {
         url.searchParams.set(fieldName, formData[fieldName]);
         log(`Adding additional field: ${fieldName} = ${formData[fieldName]}`);
+      } else {
+        // Check for prefixed versions
+        const prefixedVersions = [`0-1/${fieldName}`, `0-2/${fieldName}`];
+        for (const prefixedField of prefixedVersions) {
+          if (formData[prefixedField]) {
+            url.searchParams.set(fieldName, formData[prefixedField]);
+            log(`Adding prefixed field: ${prefixedField} -> ${fieldName} = ${formData[prefixedField]}`);
+            break;
+          }
+        }
       }
     });
 
@@ -208,11 +219,13 @@
 
     // Check if we have any meaningful form data (at least email or firstname)
     const hasFormData = allFormData.email || allFormData.firstname || allFormData.first_name || 
+                       allFormData['0-1/email'] || allFormData['0-1/firstname'] || allFormData['0-2/email'] || allFormData['0-2/firstname'] ||
                        Object.keys(allFormData).some(key => 
                          key !== 'debug' && 
                          key !== 'utm_source' && 
                          key !== 'utm_medium' && 
                          key !== 'utm_campaign' && 
+                         !key.startsWith('group[') && // Ignore HubSpot group fields
                          allFormData[key]
                        );
 
