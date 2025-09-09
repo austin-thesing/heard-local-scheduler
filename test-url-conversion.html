@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>URL Conversion Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .url-box { background: #f5f5f5; padding: 15px; margin: 10px 0; border-radius: 5px; word-break: break-all; }
+        .good { background: #e7f5e7; }
+        .bad { background: #f5e7e7; }
+        iframe { width: 100%; height: 600px; border: 1px solid #ccc; margin: 20px 0; }
+    </style>
+</head>
+<body>
+    <h1>HubSpot URL Conversion Test</h1>
+    
+    <h2>❌ Your Current URL (won't work in iframe)</h2>
+    <div class="url-box bad">
+        https://meetings.hubspot.com/bz/consultations?phone=%2B18586786677&lastname=Thesing&email=austin%40designxdevelop.com&is_your_practice_a_c_corp_or_our_does_it_have_multiple_owners_=No&firstname=Austin&what_best_describes_your_practice_=Audiologist&referrer=FORMS&submissionGuid=f6658203-6059-4d3e-ab31-8e9ee39a2f12&uuid=796d5ae4-dd6a-487e-8fef-bb0caf48fcc6
+    </div>
+    <p><strong>Issues:</strong></p>
+    <ul>
+        <li>❌ Missing <code>embed=true</code> parameter (required for iframe)</li>
+        <li>❌ Using <code>/consultations</code> endpoint (s_corp scheduler) instead of round-robin</li>
+    </ul>
+
+    <h2>✅ Fixed URL (will work in iframe)</h2>
+    <div class="url-box good" id="fixed-url">
+        Loading...
+    </div>
+    <p><strong>Improvements:</strong></p>
+    <ul>
+        <li>✅ Added <code>embed=true</code> parameter</li>
+        <li>✅ Changed to <code>/consultation</code> endpoint (round-robin scheduler)</li>
+        <li>✅ Preserved all form data</li>
+    </ul>
+
+    <h2>Live Test</h2>
+    <iframe id="test-iframe" src=""></iframe>
+
+    <script>
+        // Simulate the form data from your URL
+        const originalUrl = "https://meetings.hubspot.com/bz/consultations?phone=%2B18586786677&lastname=Thesing&email=austin%40designxdevelop.com&is_your_practice_a_c_corp_or_our_does_it_have_multiple_owners_=No&firstname=Austin&what_best_describes_your_practice_=Audiologist&referrer=FORMS&submissionGuid=f6658203-6059-4d3e-ab31-8e9ee39a2f12&uuid=796d5ae4-dd6a-487e-8fef-bb0caf48fcc6";
+        
+        // Extract form data from URL
+        const url = new URL(originalUrl);
+        const formData = {};
+        for (const [key, value] of url.searchParams) {
+            formData[key] = value;
+        }
+
+        // Build fixed URL (same logic as webflow-scheduler-fix.js)
+        const SCHEDULER_CONFIG = {
+            sole_prop: {
+                url: "https://meetings.hubspot.com/bz/consultation", // Round-robin (singular)
+                name: "Round Robin Consultation"
+            }
+        };
+
+        function buildFixedUrl(formData) {
+            const config = SCHEDULER_CONFIG.sole_prop;
+            const url = new URL(config.url);
+            
+            // Always add embed parameter
+            url.searchParams.set("embed", "true");
+            
+            // Standard field mappings
+            const fieldMappings = {
+                email: ["email", "email_address"],
+                firstName: ["firstname", "first_name"],
+                lastName: ["lastname", "last_name"], 
+                company: ["company", "practice_name"],
+                phone: ["phone", "phone_number"]
+            };
+
+            Object.entries(fieldMappings).forEach(([paramName, fieldNames]) => {
+                for (const fieldName of fieldNames) {
+                    if (formData[fieldName]) {
+                        url.searchParams.set(paramName, formData[fieldName]);
+                        break;
+                    }
+                }
+            });
+
+            // Additional HubSpot fields
+            const additionalFields = [
+                "is_your_practice_a_c_corp_or_our_does_it_have_multiple_owners_",
+                "what_best_describes_your_practice_",
+                "referrer",
+                "submissionGuid",
+                "uuid"
+            ];
+
+            additionalFields.forEach(fieldName => {
+                if (formData[fieldName]) {
+                    url.searchParams.set(fieldName, formData[fieldName]);
+                }
+            });
+
+            return url.toString();
+        }
+
+        const fixedUrl = buildFixedUrl(formData);
+        
+        // Display the fixed URL
+        document.getElementById('fixed-url').textContent = fixedUrl;
+        
+        // Load it in the iframe
+        document.getElementById('test-iframe').src = fixedUrl;
+
+        console.log("Original URL:", originalUrl);
+        console.log("Fixed URL:", fixedUrl);
+        console.log("Form data extracted:", formData);
+    </script>
+</body>
+</html>

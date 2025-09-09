@@ -3,6 +3,6 @@
   "private": true,
   "version": "0.0.0",
   "scripts": {
-    "build": "rm -rf dist && bun build scheduler-redirect.js scheduler-standalone.js form.css --outdir=dist --minify"
+    "build": "rm -rf dist && bun build scheduler-redirect.js scheduler-standalone.js webflow-scheduler-fix.js form.css --outdir=dist --minify"
   }
 }
