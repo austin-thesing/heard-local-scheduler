@@ -201,6 +201,14 @@
       document.cookie = `form_data=${btoa(JSON.stringify(formData))}; path=/; max-age=3600`;
     }
 
+    // Also store form data in localStorage for prefill functionality
+    try {
+      localStorage.setItem("hubspot_form_data", JSON.stringify(formData));
+      log("Stored form data in localStorage for prefill");
+    } catch (e) {
+      log("Failed to store form data in localStorage:", e);
+    }
+
     // Build minimal URL with only email visible
     const params = new URLSearchParams();
     if (formData.email) {
@@ -464,6 +472,14 @@
 
         // Use captured form data for developer embeds
         if (window._capturedFormData && Object.keys(window._capturedFormData).length > 0) {
+          // Also store captured form data in localStorage for prefill
+          try {
+            localStorage.setItem("hubspot_form_data", JSON.stringify(window._capturedFormData));
+            log("Stored captured form data in localStorage for prefill");
+          } catch (e) {
+            log("Failed to store captured form data in localStorage:", e);
+          }
+          
           handleFormSubmission(window._capturedFormData, options);
         }
       } else if (payload && msgType === "hsFormCallback" && DEBUG) {
