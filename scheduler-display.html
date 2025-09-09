@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Schedule Your Consultation - Heard</title>
+    
+    <!-- Facebook Pixel -->
+    <script>
+    !function(f,b,e,v,n,t,s)
+    {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+    n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+    if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+    n.queue=[];t=b.createElement(e);t.async=!0;
+    t.src=v;s=b.getElementsByTagName(e)[0];
+    s.parentNode.insertBefore(t,s)}(window, document,'script',
+    'https://connect.facebook.net/en_US/fbevents.js');
+    fbq('init', '2254477771531870');
+    fbq('track', 'PageView');
+    </script>
+    <noscript><img height="1" width="1" style="display:none"
+    src="https://www.facebook.com/tr?id=2254477771531870&ev=PageView&noscript=1"
+    /></noscript>
+
+    <!-- Reddit Pixel -->
+    <script>
+    !function(w,d){if(!w.rdt){var p=w.rdt=function(){p.sendEvent?p.sendEvent.apply(p,arguments):p.callQueue.push(arguments)};p.callQueue=[];var t=d.createElement("script");t.src="https://www.redditstatic.com/ads/pixel.js",t.async=!0;var s=d.getElementsByTagName("script")[0];s.parentNode.insertBefore(t,s)}}(window,document);
+    rdt('init','a2_fsodbl5ah1x6', {"optOut":false,"useDecimalCurrencyValues":true});
+    rdt('track', 'PageView');
+    </script>
+
+    <!-- Google Tag Manager / Google Analytics -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=GA_TRACKING_ID"></script>
+    <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'GA_TRACKING_ID');
+    </script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #f8f9fa;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .header {
+            background: #2e7d32;
+            color: white;
+            width: 100%;
+            padding: 30px 20px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+
+        .header p {
+            font-size: 16px;
+            opacity: 0.9;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            padding: 40px 20px;
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .scheduler-wrapper {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+            overflow: hidden;
+            min-height: 700px;
+            position: relative;
+        }
+
+        .loading-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 700px;
+            color: #666;
+        }
+
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #2e7d32;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+            font-size: 16px;
+            margin-bottom: 8px;
+        }
+
+        .loading-subtext {
+            font-size: 14px;
+            color: #888;
+        }
+
+        .scheduler-content {
+            display: none;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+        }
+
+        .scheduler-content.loaded {
+            display: block;
+            opacity: 1;
+        }
+
+        .meetings-iframe-container {
+            width: 100%;
+            min-height: 700px;
+        }
+
+        .error-state {
+            display: none;
+            padding: 60px 40px;
+            text-align: center;
+            color: #d32f2f;
+        }
+
+        .error-state.active {
+            display: block;
+        }
+
+        .error-state h2 {
+            margin-bottom: 16px;
+            color: #333;
+        }
+
+        .error-state p {
+            margin-bottom: 20px;
+            color: #666;
+            line-height: 1.5;
+        }
+
+        .error-state a {
+            color: #2e7d32;
+            text-decoration: none;
+            font-weight: 600;
+            padding: 12px 24px;
+            border: 2px solid #2e7d32;
+            border-radius: 6px;
+            display: inline-block;
+            transition: all 0.3s ease;
+        }
+
+        .error-state a:hover {
+            background: #2e7d32;
+            color: white;
+        }
+
+        .scheduler-info {
+            background: #f8f9fa;
+            padding: 20px;
+            border-bottom: 1px solid #e9ecef;
+            text-align: center;
+        }
+
+        .scheduler-info h3 {
+            color: #333;
+            font-size: 18px;
+            margin-bottom: 8px;
+        }
+
+        .scheduler-info p {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .debug-panel {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(0,0,0,0.9);
+            color: white;
+            padding: 16px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 12px;
+            max-width: 350px;
+            display: none;
+            z-index: 1000;
+        }
+
+        .debug-panel.active {
+            display: block;
+        }
+
+        .debug-panel h4 {
+            margin-bottom: 12px;
+            color: #4CAF50;
+        }
+
+        .debug-panel pre {
+            white-space: pre-wrap;
+            line-height: 1.4;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .header {
+                padding: 24px 16px;
+            }
+            
+            .header h1 {
+                font-size: 24px;
+            }
+            
+            .container {
+                padding: 20px 16px;
+            }
+            
+            .scheduler-wrapper {
+                border-radius: 8px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Schedule Your Consultation</h1>
+        <p>We're setting up your personalized scheduling experience based on your practice information</p>
+    </div>
+
+    <div class="container">
+        <div class="scheduler-wrapper">
+            <div class="scheduler-info" id="schedulerInfo" style="display: none;">
+                <h3 id="schedulerTitle">Consultation Scheduler</h3>
+                <p id="schedulerDescription">Loading your personalized scheduler...</p>
+            </div>
+
+            <div class="loading-state" id="loadingState">
+                <div class="loading-spinner"></div>
+                <div class="loading-text">Preparing your scheduler...</div>
+                <div class="loading-subtext">This will only take a moment</div>
+            </div>
+
+            <div class="scheduler-content" id="schedulerContent">
+                <!-- Scheduler will be injected here -->
+            </div>
+
+            <div class="error-state" id="errorState">
+                <h2>Unable to Load Scheduler</h2>
+                <p>We encountered an issue loading your personalized scheduler. Please try one of the options below:</p>
+                <div style="margin: 30px 0;">
+                    <a href="https://meetings.hubspot.com/bz/consultation" target="_blank">Schedule Sole Proprietor Consultation</a>
+                    <br><br>
+                    <a href="https://meetings.hubspot.com/bz/consultations" target="_blank">Schedule S-Corp Consultation</a>
+                </div>
+                <p>Or <a href="https://joinheard.com/contact">contact our support team</a> for assistance.</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="debug-panel" id="debugPanel">
+        <h4>🐛 Debug Information</h4>
+        <pre id="debugContent"></pre>
+    </div>
+
+    <script src="scheduler-router.js"></script>
+    <script>
+        // Scheduler Display Page Logic
+        (function() {
+            'use strict';
+
+            // Check for debug mode
+            const DEBUG = window.location.hostname === 'localhost' || 
+                         window.location.search.includes('debug=true');
+
+            function log(...args) {
+                if (DEBUG) {
+                    console.log('[Scheduler Display]', ...args);
+                }
+            }
+
+            function updateDebugPanel(data) {
+                if (!DEBUG) return;
+                
+                const debugPanel = document.getElementById('debugPanel');
+                const debugContent = document.getElementById('debugContent');
+                
+                if (debugPanel && debugContent) {
+                    debugPanel.classList.add('active');
+                    debugContent.textContent = JSON.stringify(data, null, 2);
+                }
+            }
+
+            function fireLeadTrackingEvents(schedulerType, params) {
+                log('Firing lead tracking events for scheduler type:', schedulerType);
+                
+                try {
+                    // Fire Facebook Pixel Lead event
+                    if (typeof fbq !== 'undefined') {
+                        fbq('track', 'Lead', {
+                            content_category: 'consultation',
+                            content_name: schedulerType + '_consultation',
+                            value: 0,
+                            currency: 'USD'
+                        });
+                        log('✅ Facebook Lead event fired');
+                    } else {
+                        log('⚠️ Facebook Pixel (fbq) not available');
+                    }
+                } catch (error) {
+                    log('❌ Facebook Pixel error:', error);
+                }
+
+                try {
+                    // Fire Reddit Pixel Lead event
+                    if (typeof rdt !== 'undefined') {
+                        rdt('track', 'Lead', {
+                            customEventName: 'ConsultationScheduler',
+                            value: 0,
+                            currency: 'USD',
+                            schedulerType: schedulerType
+                        });
+                        log('✅ Reddit Lead event fired');
+                    } else {
+                        log('⚠️ Reddit Pixel (rdt) not available');
+                    }
+                } catch (error) {
+                    log('❌ Reddit Pixel error:', error);
+                }
+
+                try {
+                    // Fire Google Analytics Lead event
+                    if (typeof gtag !== 'undefined') {
+                        gtag('event', 'generate_lead', {
+                            event_category: 'engagement',
+                            event_label: schedulerType + '_consultation',
+                            value: 1
+                        });
+                        log('✅ Google Analytics Lead event fired');
+                    } else if (typeof ga !== 'undefined') {
+                        // Legacy Google Analytics
+                        ga('send', 'event', 'Lead', 'Generate', schedulerType + '_consultation', 1);
+                        log('✅ Legacy Google Analytics Lead event fired');
+                    } else {
+                        log('⚠️ Google Analytics (gtag/ga) not available');
+                    }
+                } catch (error) {
+                    log('❌ Google Analytics error:', error);
+                }
+
+                try {
+                    // Fire PostHog event
+                    if (typeof window.posthog !== 'undefined') {
+                        window.posthog.capture('scheduler_lead_generated', {
+                            scheduler_type: schedulerType,
+                            page_path: window.location.pathname,
+                            has_email: !!params.email,
+                            has_name: !!(params.firstname || params.first_name),
+                            referrer: document.referrer
+                        });
+                        log('✅ PostHog Lead event fired');
+                    } else {
+                        log('⚠️ PostHog not available');
+                    }
+                } catch (error) {
+                    log('❌ PostHog error:', error);
+                }
+
+                try {
+                    // Fire Amplitude event
+                    if (typeof window.amplitude !== 'undefined') {
+                        window.amplitude.track('scheduler_lead_generated', {
+                            scheduler_type: schedulerType,
+                            source: 'hubspot_form_router',
+                            form_fields_count: Object.keys(params).length,
+                            has_email: !!params.email,
+                            timestamp: new Date().toISOString()
+                        });
+                        log('✅ Amplitude Lead event fired');
+                    } else {
+                        log('⚠️ Amplitude not available');
+                    }
+                } catch (error) {
+                    log('❌ Amplitude error:', error);
+                }
+
+                // Update debug panel with tracking info
+                if (DEBUG) {
+                    updateDebugPanel({
+                        ...params,
+                        tracking_events_fired: {
+                            facebook: typeof fbq !== 'undefined',
+                            reddit: typeof rdt !== 'undefined',
+                            google: typeof gtag !== 'undefined' || typeof ga !== 'undefined',
+                            posthog: typeof window.posthog !== 'undefined',
+                            amplitude: typeof window.amplitude !== 'undefined'
+                        },
+                        timestamp: new Date().toISOString()
+                    });
+                }
+            }
+
+            function getQueryParams() {
+                const params = new URLSearchParams(window.location.search);
+                const result = {};
+                for (const [key, value] of params) {
+                    result[key] = value;
+                }
+                return result;
+            }
+
+            function showError(message = null) {
+                log('Showing error state:', message);
+                
+                document.getElementById('loadingState').style.display = 'none';
+                document.getElementById('schedulerContent').style.display = 'none';
+                document.getElementById('errorState').classList.add('active');
+            }
+
+            function updateSchedulerInfo(schedulerType, config) {
+                const infoPanel = document.getElementById('schedulerInfo');
+                const title = document.getElementById('schedulerTitle');
+                const description = document.getElementById('schedulerDescription');
+                
+                if (infoPanel && title && description) {
+                    title.textContent = config.name;
+                    description.textContent = config.description;
+                    infoPanel.style.display = 'block';
+                }
+            }
+
+            function loadScheduler(schedulerUrl, schedulerType, config) {
+                log('Loading scheduler:', schedulerUrl);
+
+                updateSchedulerInfo(schedulerType, config);
+                
+                const container = document.getElementById('schedulerContent');
+                
+                // Create scheduler HTML using the embed pattern from existing files
+                container.innerHTML = `
+                    <div class="meetings-iframe-container" data-src="${schedulerUrl}"></div>
+                `;
+
+                // Load HubSpot embed script
+                const script = document.createElement('script');
+                script.type = 'text/javascript';
+                script.src = 'https://static.hsappstatic.net/MeetingsEmbed/ex/MeetingsEmbedCode.js';
+                
+                script.onload = function() {
+                    log('HubSpot embed script loaded successfully');
+                    
+                    // Hide loading state and show scheduler
+                    document.getElementById('loadingState').style.display = 'none';
+                    container.classList.add('loaded');
+                    
+                    // Fire lead tracking events
+                    fireLeadTrackingEvents(schedulerType, params);
+                    
+                    // Track successful load
+                    if (typeof window.amplitude !== 'undefined') {
+                        window.amplitude.track('scheduler_display_loaded', {
+                            scheduler_type: schedulerType,
+                            scheduler_url: schedulerUrl
+                        });
+                    }
+                };
+                
+                script.onerror = function() {
+                    log('Error loading HubSpot embed script');
+                    showError('Failed to load scheduler embed script');
+                };
+
+                document.head.appendChild(script);
+            }
+
+            function initializeScheduler() {
+                try {
+                    const params = getQueryParams();
+                    log('URL parameters:', params);
+
+                    updateDebugPanel({
+                        url: window.location.href,
+                        params: params,
+                        timestamp: new Date().toISOString()
+                    });
+
+                    // Determine scheduler type
+                    let schedulerType = params.scheduler_type;
+                    if (!schedulerType) {
+                        schedulerType = window.HubSpotRouter.determineSchedulerType(params);
+                        log('Determined scheduler type:', schedulerType);
+                    }
+
+                    // Get scheduler configuration
+                    const config = window.HubSpotRouter.config[schedulerType] || 
+                                  window.HubSpotRouter.config.default;
+
+                    // Build scheduler URL with parameters
+                    const schedulerUrl = window.HubSpotRouter.buildSchedulerUrl(schedulerType, params);
+
+                    // Load the scheduler after a brief delay for smooth UX
+                    setTimeout(() => {
+                        loadScheduler(schedulerUrl, schedulerType, config);
+                    }, 800);
+
+                } catch (error) {
+                    log('Error initializing scheduler:', error);
+                    showError('Initialization error: ' + error.message);
+                }
+            }
+
+            // Initialize when DOM is ready and router is loaded
+            function init() {
+                if (typeof window.HubSpotRouter !== 'undefined') {
+                    initializeScheduler();
+                } else {
+                    // Wait for router to load
+                    let attempts = 0;
+                    const checkRouter = setInterval(() => {
+                        attempts++;
+                        if (typeof window.HubSpotRouter !== 'undefined') {
+                            clearInterval(checkRouter);
+                            initializeScheduler();
+                        } else if (attempts > 20) {
+                            clearInterval(checkRouter);
+                            log('Router failed to load within timeout');
+                            showError('Router initialization timeout');
+                        }
+                    }, 100);
+                }
+            }
+
+            // Start initialization
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', init);
+            } else {
+                init();
+            }
+
+            log('Scheduler display page loaded');
+        })();
+    </script>
+</body>
+</html>

@@ -1,12 +1,28 @@
-# {Project Name Here} Codebase Guide
+# HubSpot Form Router Codebase Guide
 
 ## Build/Test/Run Commands
 
+- **Test locally**: Open `form-with-router.html?debug=true` in browser
+- **Debug mode**: Add `?debug=true` to any URL for console logging
+- **No build process**: Pure JavaScript/HTML - just open files in browser
+- **Prettier**: Configured via `.prettierignore` (excludes build artifacts, logs, lockfiles)
+
 ## Code Style & Conventions
 
-See [Engineering Standards](#overall-engineering-standards) for more details on engineering standards.
+- **JavaScript**: ES6+ with IIFE pattern, strict mode enabled
+- **Naming**: camelCase for variables/functions, SCREAMING_SNAKE_CASE for constants
+- **Comments**: JSDoc format for functions, inline comments for complex logic
+- **Error handling**: Try-catch with fallback UIs, validate external data, log errors
+- **Security**: Validate postMessage origins, sanitize URL parameters, use HTTPS
+- **DOM**: Query selectors with fallbacks, check element existence before use
 
 ## Key Files & Architecture
+
+- **scheduler-router.js**: Main routing logic, postMessage listener, scheduler embedding
+- **scheduler-display.html**: Standalone scheduler page with URL parameter routing
+- **form-with-router.html**: Example integration with HubSpot form + router
+- **scheduler-embeds/**: Static HTML files for different scheduler types
+- **PLAN.md**: Detailed implementation documentation and setup instructions
 
 ## Overall Engineering Standards
 
