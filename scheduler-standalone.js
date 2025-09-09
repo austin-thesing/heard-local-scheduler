@@ -51,39 +51,20 @@
     }
   }
 
-  // Fallback: build scheduler URL with prefill
-  function buildSchedulerUrlFallback(schedulerType, params) {
-    const config = (window.HubSpotRouter && window.HubSpotRouter.config && window.HubSpotRouter.config[schedulerType]) || FALLBACK_SCHEDULER_CONFIG[schedulerType] || FALLBACK_SCHEDULER_CONFIG.sole_prop;
-    const url = new URL(config.url);
-    url.searchParams.set("embed", "true");
-
-    const fieldMappings = {
-      email: ["email", "email_address"],
-      firstName: ["firstname", "first_name", "fname"],
-      lastName: ["lastname", "last_name", "lname"],
-      company: ["company", "practice_name", "business_name"],
-      phone: ["phone", "phone_number", "telephone"],
-    };
-
-    Object.entries(fieldMappings).forEach(([paramName, fieldNames]) => {
-      for (const fieldName of fieldNames) {
-        if (params && params[fieldName]) {
-          url.searchParams.set(paramName, params[fieldName]);
-          break;
-        }
-      }
-    });
-
-    const utmParams = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term"];
-    utmParams.forEach((p) => {
-      if (params && params[p]) url.searchParams.set(p, params[p]);
-    });
-
-    return url.toString();
-  }
-
-  // Get data from sessionStorage or cookies
+  // Get data from sessionStorage or cookies (with localStorage support)
   function getRouterData() {
+    // Try localStorage first (for form data prefill)
+    try {
+      const localStorageData = localStorage.getItem("hubspot_form_data");
+      if (localStorageData) {
+        const formData = JSON.parse(localStorageData);
+        log("Found form data in localStorage");
+        return { formData: formData };
+      }
+    } catch (e) {
+      log("localStorage error:", e);
+    }
+
     // Try sessionStorage first
     try {
       const storedData = sessionStorage.getItem("scheduler_router_data");
@@ -131,6 +112,43 @@
       params[key] = value;
     }
     return params;
+  }
+
+  // Build scheduler URL with prefill (enhanced to read localStorage)
+  function buildSchedulerUrl(schedulerType, params) {
+    const config = (window.HubSpotRouter && window.HubSpotRouter.config && window.HubSpotRouter.config[schedulerType]) || FALLBACK_SCHEDULER_CONFIG[schedulerType] || FALLBACK_SCHEDULER_CONFIG.sole_prop;
+    const url = new URL(config.url);
+    url.searchParams.set("embed", "true");
+
+    // Standard field mappings (existing system)
+    const fieldMappings = {
+      email: ["email", "email_address"],
+      firstName: ["firstname", "first_name", "fname"],
+      lastName: ["lastname", "last_name", "lname"],
+      company: ["company", "practice_name", "business_name"],
+      phone: ["phone", "phone_number", "telephone"],
+    };
+
+    Object.entries(fieldMappings).forEach(([paramName, fieldNames]) => {
+      for (const fieldName of fieldNames) {
+        if (params && params[fieldName]) {
+          url.searchParams.set(paramName, params[fieldName]);
+          log(`Mapping ${fieldName} -> ${paramName}: ${params[fieldName]}`);
+          break;
+        }
+      }
+    });
+
+    // Add UTM parameters if present
+    const utmParams = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term"];
+    utmParams.forEach((param) => {
+      if (params && params[param]) {
+        url.searchParams.set(param, params[param]);
+      }
+    });
+
+    log("Built scheduler URL:", url.toString());
+    return url.toString();
   }
 
   // Fire lead tracking events
@@ -206,7 +224,7 @@
     // Build URL for forced round-robin scheduler (maps to sole_prop config)
     const configSource = window.HubSpotRouter && window.HubSpotRouter.config ? window.HubSpotRouter.config : FALLBACK_SCHEDULER_CONFIG;
     const selectedConfig = configSource[CONFIG_SCHEDULER_TYPE] || configSource.sole_prop;
-    const schedulerUrl = window.HubSpotRouter && typeof window.HubSpotRouter.buildSchedulerUrl === "function" ? window.HubSpotRouter.buildSchedulerUrl(CONFIG_SCHEDULER_TYPE, params) : buildSchedulerUrlFallback(CONFIG_SCHEDULER_TYPE, params);
+    const schedulerUrl = window.HubSpotRouter && typeof window.HubSpotRouter.buildSchedulerUrl === "function" ? window.HubSpotRouter.buildSchedulerUrl(CONFIG_SCHEDULER_TYPE, params) : buildSchedulerUrl(CONFIG_SCHEDULER_TYPE, params);
 
     log("Loading scheduler:", selectedConfig && selectedConfig.name ? selectedConfig.name : "Round Robin");
     log("URL:", schedulerUrl);
@@ -245,7 +263,7 @@
       getRouterData,
       getQueryParams,
       determineSchedulerTypeFallback,
-      buildSchedulerUrlFallback,
+      buildSchedulerUrl,
       fireLeadEvents,
       injectScheduler,
       init,

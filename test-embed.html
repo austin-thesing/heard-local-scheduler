@@ -1,101 +1,117 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Test HubSpot Form with Router</title>
-  <link rel="stylesheet" href="form.css">
-  <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      padding: 40px;
-      max-width: 800px;
-      margin: 0 auto;
-    }
-    h1 {
-      color: #333;
-      margin-bottom: 30px;
-    }
-    .debug-info {
-      background: #f0f0f0;
-      padding: 20px;
-      border-radius: 8px;
-      margin-top: 30px;
-    }
-    .debug-info h2 {
-      font-size: 18px;
-      margin-top: 0;
-    }
-    .debug-info pre {
-      background: white;
-      padding: 10px;
-      border-radius: 4px;
-      overflow-x: auto;
-    }
-  </style>
-</head>
-<body>
-  <h1>Test HubSpot Form with Router</h1>
-  
-  <!-- Include the embed component -->
-  <div id="form-container">
-    <!-- HubSpot Form Embed Component -->
-    <!-- Developer Embed Version -->
-    <script src="https://js.hsforms.net/forms/embed/developer/7507639.js" defer></script>
-    <div class="hs-form-html" data-region="na1" data-form-id="002af025-1d67-4e7f-b2bf-2d221f555805" data-portal-id="7507639"></div>
-  </div>
-
-  <!-- Load the HubSpot Redirect -->
-  <script src="scheduler-redirect.js"></script>
-
-  <!-- Debug information -->
-  <div class="debug-info">
-    <h2>Debug Information</h2>
-    <p>Open browser console to see routing logs (debug mode is enabled on this test page)</p>
-    <p><strong>Instructions:</strong> Fill out the form including dropdown selections and phone number to test capture.</p>
-    <div id="debug-output">
-      <pre id="captured-data">Captured form data will appear here...</pre>
-    </div>
-    <div style="margin-top: 10px;">
-      <strong>Key fields to test:</strong>
-      <ul style="margin: 5px 0; padding-left: 20px;">
-        <li>Dropdown/Select fields (e.g., "Does your practice have multiple owners?")</li>
-        <li>Phone number field (should capture both formatted and clean versions)</li>
-        <li>Email and text fields</li>
-      </ul>
-    </div>
-  </div>
-
-  <script>
-    // Enable debug mode for testing
-    const url = new URL(window.location.href);
-    if (!url.searchParams.has('debug')) {
-      url.searchParams.set('debug', 'true');
-      window.history.replaceState({}, '', url.toString());
-    }
-
-    // Monitor captured form data for debugging
-    setInterval(() => {
-      if (window._capturedFormData && Object.keys(window._capturedFormData).length > 0) {
-        const formData = { ...window._capturedFormData };
-        
-        // Highlight phone and dropdown fields in the output
-        let output = 'Captured form data:\n' + JSON.stringify(formData, null, 2);
-        
-        // Add field count
-        const fieldCount = Object.keys(formData).length;
-        output = `Captured ${fieldCount} field(s):\n` + JSON.stringify(formData, null, 2);
-        
-        // Don't add extra console logs here - the router already logs field captures
-        
-        document.getElementById('captured-data').textContent = output;
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Test HubSpot Form with Router</title>
+    <link rel="stylesheet" href="form.css" />
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        padding: 40px;
+        max-width: 800px;
+        margin: 0 auto;
       }
-    }, 1000);
+      h1 {
+        color: #333;
+        margin-bottom: 30px;
+      }
+      .debug-info {
+        background: #f0f0f0;
+        padding: 20px;
+        border-radius: 8px;
+        margin-top: 30px;
+      }
+      .debug-info h2 {
+        font-size: 18px;
+        margin-top: 0;
+      }
+      .debug-info pre {
+        background: white;
+        padding: 10px;
+        border-radius: 4px;
+        overflow-x: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Test HubSpot Form with Router</h1>
 
-    // Log when router is loaded
-    console.log('[Test Page] HubSpot Router loaded:', !!window.HubSpotRouter);
-    console.log('[Test Page] Debug mode:', window.HubSpotRouter?.DEBUG);
-    console.log('[Test Page] Monitoring for dropdown and phone fields...');
-  </script>
-</body>
+    <!-- Include the embed component -->
+    <div id="form-container">
+      <!-- HubSpot Form Embed Component -->
+      <!-- Developer Embed Version -->
+      <script src="https://js.hsforms.net/forms/embed/developer/7507639.js" defer></script>
+      <div class="hs-form-html" data-region="na1" data-form-id="002af025-1d67-4e7f-b2bf-2d221f555805" data-portal-id="7507639"></div>
+    </div>
+
+    <!-- Load the HubSpot Redirect -->
+    <script src="scheduler-redirect.js"></script>
+
+    <!-- Debug information -->
+    <div class="debug-info">
+      <h2>Debug Information</h2>
+      <p>Open browser console to see routing logs (debug mode is enabled on this test page)</p>
+      <p><strong>Instructions:</strong> Fill out the form including dropdown selections and phone number to test capture.</p>
+      <div id="debug-output">
+        <pre id="captured-data">Captured form data will appear here...</pre>
+      </div>
+      <div style="margin-top: 10px">
+        <strong>Key fields to test:</strong>
+        <ul style="margin: 5px 0; padding-left: 20px">
+          <li>Dropdown/Select fields (e.g., "Does your practice have multiple owners?")</li>
+          <li>Phone number field (should capture both formatted and clean versions)</li>
+          <li>Email and text fields</li>
+        </ul>
+      </div>
+    </div>
+
+    <script>
+      // Enable debug mode for testing
+      const url = new URL(window.location.href);
+      if (!url.searchParams.has("debug")) {
+        url.searchParams.set("debug", "true");
+        window.history.replaceState({}, "", url.toString());
+      }
+
+      // Monitor captured form data for debugging
+      setInterval(() => {
+        if (window._capturedFormData && Object.keys(window._capturedFormData).length > 0) {
+          const formData = { ...window._capturedFormData };
+
+          // Highlight phone and dropdown fields in the output
+          let output = "Captured form data:\n" + JSON.stringify(formData, null, 2);
+
+          // Add field count
+          const fieldCount = Object.keys(formData).length;
+          output = `Captured ${fieldCount} field(s):\n` + JSON.stringify(formData, null, 2);
+
+          // Don't add extra console logs here - the router already logs field captures
+
+          document.getElementById("captured-data").textContent = output;
+        }
+      }, 1000);
+
+      // Log when router is loaded
+      console.log("[Test Page] HubSpot Router loaded:", !!window.HubSpotRouter);
+      console.log("[Test Page] Debug mode:", window.HubSpotRouter?.DEBUG);
+      console.log("[Test Page] Monitoring for dropdown and phone fields...");
+
+      // Add enhanced scheduler test button
+      const testButton = document.createElement("button");
+      testButton.textContent = "Test Enhanced Scheduler";
+      testButton.style.cssText = "background: #226752; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; margin-top: 10px;";
+      testButton.onclick = function () {
+        // Set test data in localStorage and open enhanced scheduler test page
+        const testData = {
+          firstname: "Test",
+          lastname: "User",
+          email: "test@example.com",
+        };
+        localStorage.setItem("hubspot_form_data", JSON.stringify(testData));
+        window.open("test-enhanced-scheduler.html?debug=true", "_blank");
+      };
+      document.querySelector(".debug-info").appendChild(testButton);
+    </script>
+  </body>
 </html>
