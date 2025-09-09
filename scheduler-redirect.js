@@ -1,543 +1,830 @@
 /**
- * HubSpot Form Router
+ * HubSpot Form Router - Refactored Version
  * Listens for HubSpot form submissions and routes users to appropriate schedulers
  * Based on form responses, particularly "Does your practice have multiple owners?"
  */
 
 (function () {
-  "use strict";
+  'use strict';
 
-  // Configuration for different scheduler types
-  const SCHEDULER_CONFIG = {
-    sole_prop: {
-      url: "https://meetings.hubspot.com/bz/consultation",
-      name: "Sole Proprietor Consultation",
-      description: "For single-owner practices",
-    },
-    s_corp: {
-      url: "https://meetings.hubspot.com/bz/consultations",
-      name: "S-Corp Consultation",
-      description: "For multi-owner practices",
-    },
-  };
+  // Import modules (in a real ES6 module environment, these would be actual imports)
+  // For browser compatibility, we'll use a simple module loader pattern
+  const modules = {};
 
-  // Debug logging
-  const DEBUG = window.location.hostname === "localhost" || window.location.search.includes("debug=true");
-
-  function log(...args) {
-    if (DEBUG) {
-      console.log("[HubSpot Router]", ...args);
-    }
+  // Simple module system for browser compatibility
+  function defineModule(name, dependencies, factory) {
+    const deps = dependencies.map((dep) => modules[dep]);
+    modules[name] = factory.apply(null, deps);
   }
 
-  // Expose DEBUG flag for other scripts
-  window.HubSpotRouter = window.HubSpotRouter || {};
-  window.HubSpotRouter.DEBUG = DEBUG;
+  // Define all modules
+  defineModule('config', [], () => ({
+    SCHEDULER_CONFIG: {
+      sole_prop: {
+        url: 'https://meetings.hubspot.com/bz/consultation',
+        name: 'Sole Proprietor Consultation',
+        description: 'For single-owner practices',
+      },
+      s_corp: {
+        url: 'https://meetings.hubspot.com/bz/consultations',
+        name: 'S-Corp Consultation',
+        description: 'For multi-owner practices',
+      },
+      default: {
+        url: 'https://meetings.hubspot.com/bz/consultation',
+        name: 'Default Consultation',
+        description: 'Default consultation scheduler',
+      },
+    },
+    MULTIPLE_OWNERS_FIELDS: [
+      'is_your_practice_a_c_corp_or_our_does_it_have_multiple_owners_',
+      'does_your_practice_have_multiple_owners',
+      'multiple_owners',
+      'practice_multiple_owners',
+      'has_multiple_owners',
+    ],
+    FIELD_MAPPINGS: {
+      email: ['email', 'email_address'],
+      firstName: ['firstname', 'first_name', 'fname'],
+      lastName: ['lastname', 'last_name', 'lname'],
+      company: ['company', 'practice_name', 'business_name'],
+      phone: ['phone', 'phone_number', 'telephone'],
+    },
+    UTM_PARAMS: [
+      'utm_source',
+      'utm_medium',
+      'utm_campaign',
+      'utm_content',
+      'utm_term',
+    ],
+    VALID_HUBSPOT_DOMAINS: [
+      'hubspot.com',
+      'hsforms.com',
+      'hsforms.net',
+      'hsappstatic.net',
+    ],
+  }));
 
-  // Ensure we only route once per page load
-  let HAS_ROUTED = false;
+  defineModule('utils', ['config'], (config) => {
+    const DEBUG =
+      window.location.hostname === 'localhost' ||
+      window.location.search.includes('debug=true');
 
-  // Normalize HubSpot payloads and raw form objects into a flat key/value map
-  function canonicalKey(key) {
-    try {
-      if (!key) return "";
-      const str = String(key);
-      return str.indexOf("/") !== -1 ? str.split("/").pop() : str;
-    } catch (e) {
-      return key;
+    function log(...args) {
+      if (DEBUG) {
+        console.log('[HubSpot Router]', ...args);
+      }
     }
-  }
 
-  function normalizeFormData(input) {
-    const out = {};
-    if (!input) return out;
-
-    // hsFormCallback often sends { fields: Array<{name,value}> } or an object
-    if (Array.isArray(input)) {
-      input.forEach((f) => {
-        if (!f) return;
-        const raw = f.name || f.field || "";
-        const name = canonicalKey(raw);
-        const val = typeof f.value === "string" ? f.value : Array.isArray(f.value) ? f.value[0] : f.value != null ? String(f.value) : "";
-        if (raw) out[raw] = val;
-        if (name && name !== raw) out[name] = val;
-      });
-      return out;
+    function sanitizeInput(input) {
+      if (typeof input !== 'string') return '';
+      return input
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
     }
 
-    if (input.fields) {
-      const fields = input.fields;
-      if (Array.isArray(fields)) {
-        fields.forEach((f) => {
+    function canonicalKey(key) {
+      try {
+        if (!key) return '';
+        const str = String(key);
+        return str.indexOf('/') !== -1 ? str.split('/').pop() : str;
+      } catch (e) {
+        return key;
+      }
+    }
+
+    function normalizeFormData(input) {
+      const out = {};
+      if (!input) return out;
+
+      if (Array.isArray(input)) {
+        input.forEach((f) => {
           if (!f) return;
-          const raw = f.name || f.field || "";
+          const raw = f.name || f.field || '';
           const name = canonicalKey(raw);
-          const val = typeof f.value === "string" ? f.value : Array.isArray(f.value) ? f.value[0] : f.value != null ? String(f.value) : "";
+          const val = sanitizeInput(normalizeValue(f.value));
           if (raw) out[raw] = val;
           if (name && name !== raw) out[name] = val;
         });
-      } else if (typeof fields === "object") {
-        Object.entries(fields).forEach(([k, v]) => {
-          const name = canonicalKey(k);
-          const val = typeof v === "string" ? v : Array.isArray(v) ? v[0] : v != null ? String(v) : "";
-          out[k] = val;
-          if (name && name !== k) out[name] = val;
-        });
+        return out;
       }
+
+      if (input.fields) {
+        const fields = input.fields;
+        if (Array.isArray(fields)) {
+          fields.forEach((f) => {
+            if (!f) return;
+            const raw = f.name || f.field || '';
+            const name = canonicalKey(raw);
+            const val = sanitizeInput(normalizeValue(f.value));
+            if (raw) out[raw] = val;
+            if (name && name !== raw) out[name] = val;
+          });
+        } else if (typeof fields === 'object') {
+          Object.entries(fields).forEach(([k, v]) => {
+            const name = canonicalKey(k);
+            const val = sanitizeInput(normalizeValue(v));
+            out[k] = val;
+            if (name && name !== k) out[name] = val;
+          });
+        }
+        return out;
+      }
+
+      Object.entries(input).forEach(([k, v]) => {
+        const name = canonicalKey(k);
+        const val = sanitizeInput(normalizeValue(v));
+        out[k] = val;
+        if (name && name !== k) out[name] = val;
+      });
       return out;
     }
 
-    // Plain object of key/values
-    Object.entries(input).forEach(([k, v]) => {
-      const name = canonicalKey(k);
-      const val = typeof v === "string" ? v : Array.isArray(v) ? v[0] : v != null ? String(v) : "";
-      out[k] = val;
-      if (name && name !== k) out[name] = val;
-    });
-    return out;
-  }
-
-  /**
-   * Determine scheduler type based on form data
-   */
-  function determineSchedulerType(formData) {
-    log("Determining scheduler type from form data:", formData);
-
-    // Look for the "multiple owners" field with various possible names
-    const multipleOwnersFields = ["is_your_practice_a_c_corp_or_our_does_it_have_multiple_owners_", "does_your_practice_have_multiple_owners", "multiple_owners", "practice_multiple_owners", "has_multiple_owners"];
-
-    let multipleOwners = null;
-
-    // Check each possible field name
-    for (const fieldName of multipleOwnersFields) {
-      if (formData[fieldName]) {
-        multipleOwners = formData[fieldName];
-        log(`Found multiple owners field: ${fieldName} = ${multipleOwners}`);
-        break;
-      }
+    function normalizeValue(value) {
+      if (typeof value === 'string') return value;
+      if (Array.isArray(value)) return value[0] || '';
+      if (value != null) return String(value);
+      return '';
     }
 
-    if (!multipleOwners) {
-      log("No multiple owners field found, using default");
-      return "default";
-    }
+    function determineSchedulerType(formData) {
+      log('Determining scheduler type from form data:', formData);
 
-    // Normalize the value
-    const normalizedValue = multipleOwners.toString().toLowerCase().trim();
+      let multipleOwners = null;
 
-    if (normalizedValue === "no" || normalizedValue === "false") {
-      log("Single owner detected -> sole_prop");
-      return "sole_prop";
-    } else if (normalizedValue === "yes" || normalizedValue === "true") {
-      log("Multiple owners detected -> s_corp");
-      return "s_corp";
-    }
-
-    log("Unclear response, using default");
-    return "default";
-  }
-
-  /**
-   * Build scheduler URL with pre-filled data
-   */
-  function buildSchedulerUrl(schedulerType, formData) {
-    const config = SCHEDULER_CONFIG[schedulerType] || SCHEDULER_CONFIG.default;
-    const url = new URL(config.url);
-
-    // Always add embed parameter
-    url.searchParams.set("embed", "true");
-
-    // Pre-fill common fields
-    const fieldMappings = {
-      email: ["email", "email_address"],
-      firstName: ["firstname", "first_name", "fname"],
-      lastName: ["lastname", "last_name", "lname"],
-      company: ["company", "practice_name", "business_name"],
-      phone: ["phone", "phone_number", "telephone"],
-    };
-
-    Object.entries(fieldMappings).forEach(([paramName, fieldNames]) => {
-      for (const fieldName of fieldNames) {
+      for (const fieldName of config.MULTIPLE_OWNERS_FIELDS) {
         if (formData[fieldName]) {
-          url.searchParams.set(paramName, formData[fieldName]);
-          log(`Mapping ${fieldName} -> ${paramName}: ${formData[fieldName]}`);
+          multipleOwners = formData[fieldName];
+          log(`Found multiple owners field: ${fieldName} = ${multipleOwners}`);
           break;
         }
       }
-    });
 
-    // Add UTM parameters if present
-    const utmParams = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term"];
-    utmParams.forEach((param) => {
-      if (formData[param]) {
-        url.searchParams.set(param, formData[param]);
+      if (!multipleOwners) {
+        log('No multiple owners field found, using default');
+        return 'default';
       }
-    });
 
-    log("Built scheduler URL:", url.toString());
-    return url.toString();
-  }
+      const normalizedValue = multipleOwners.toString().toLowerCase().trim();
 
-  /**
-   * Redirect to scheduler display page
-   */
-  function redirectToScheduler(formData, schedulerType) {
-    // Store sensitive data in sessionStorage
-    const routerData = {
-      scheduler_type: schedulerType,
-      formData: formData,
-      timestamp: Date.now(),
-      source: "hubspot_form",
+      if (normalizedValue === 'no' || normalizedValue === 'false') {
+        log('Single owner detected -> sole_prop');
+        return 'sole_prop';
+      } else if (normalizedValue === 'yes' || normalizedValue === 'true') {
+        log('Multiple owners detected -> s_corp');
+        return 's_corp';
+      }
+
+      log('Unclear response, using default');
+      return 'default';
+    }
+
+    function buildSchedulerUrl(schedulerType, formData) {
+      const schedulerConfig =
+        config.SCHEDULER_CONFIG[schedulerType] ||
+        config.SCHEDULER_CONFIG.default;
+      const url = new URL(schedulerConfig.url);
+
+      url.searchParams.set('embed', 'true');
+
+      Object.entries(config.FIELD_MAPPINGS).forEach(
+        ([paramName, fieldNames]) => {
+          for (const fieldName of fieldNames) {
+            if (formData[fieldName]) {
+              url.searchParams.set(paramName, formData[fieldName]);
+              log(
+                `Mapping ${fieldName} -> ${paramName}: ${formData[fieldName]}`
+              );
+              break;
+            }
+          }
+        }
+      );
+
+      config.UTM_PARAMS.forEach((param) => {
+        if (formData[param]) {
+          url.searchParams.set(param, formData[param]);
+        }
+      });
+
+      log('Built scheduler URL:', url.toString());
+      return url.toString();
+    }
+
+    function isValidHubSpotOrigin(origin) {
+      try {
+        const host = new URL(origin).hostname;
+        return config.VALID_HUBSPOT_DOMAINS.some(
+          (domain) => host === domain || host.endsWith(`.${domain}`)
+        );
+      } catch (e) {
+        return false;
+      }
+    }
+
+    function getQueryParams() {
+      const params = {};
+      const searchParams = new URLSearchParams(window.location.search);
+      for (const [key, value] of searchParams) {
+        params[key] = value;
+      }
+      return params;
+    }
+
+    return {
+      log,
+      sanitizeInput,
+      canonicalKey,
+      normalizeFormData,
+      determineSchedulerType,
+      buildSchedulerUrl,
+      isValidHubSpotOrigin,
+      getQueryParams,
+      DEBUG,
     };
+  });
 
-    try {
-      sessionStorage.setItem("scheduler_router_data", JSON.stringify(routerData));
-      log("Stored router data in sessionStorage");
-    } catch (e) {
-      log("Failed to store in sessionStorage, falling back to cookies");
-      // Fallback to cookie if sessionStorage fails
-      document.cookie = `scheduler_type=${schedulerType}; path=/; max-age=3600`;
-      // Base64 encode the form data to avoid issues with special characters
-      document.cookie = `form_data=${btoa(JSON.stringify(formData))}; path=/; max-age=3600`;
-    }
-
-    // Also store form data in localStorage for prefill functionality
-    try {
-      localStorage.setItem("hubspot_form_data", JSON.stringify(formData));
-      log("Stored form data in localStorage for prefill");
-    } catch (e) {
-      log("Failed to store form data in localStorage:", e);
-    }
-
-    // Build minimal URL with only email visible
-    const params = new URLSearchParams();
-    if (formData.email) {
-      params.set("email", formData.email);
-    }
-
-    // Redirect to target scheduler page with minimal query string
-    const redirectUrl = `/hs-scheduler/ty-general${params.toString() ? "?" + params.toString() : ""}`;
-    log("Redirecting to:", redirectUrl);
-    window.location.href = redirectUrl;
-  }
-
-  /**
-   * Main form submission handler
-   */
-  function handleFormSubmission(formData, options = {}) {
-    log("Form submission detected:", formData);
-    if (HAS_ROUTED) {
-      log("Routing already performed; skipping");
-      return;
-    }
-    HAS_ROUTED = true;
-
-    const schedulerType = determineSchedulerType(formData);
-    redirectToScheduler(formData, schedulerType);
-
-    // Fire analytics events
-    if (typeof window.amplitude !== "undefined") {
-      window.amplitude.track("scheduler_router_triggered", {
-        scheduler_type: schedulerType,
-        has_email: !!formData.email,
-        has_name: !!(formData.firstname || formData.first_name),
-      });
-    }
-
-    if (typeof window.posthog !== "undefined") {
-      window.posthog.capture("scheduler_router_triggered", {
-        scheduler_type: schedulerType,
-        method: "redirect",
-      });
-    }
-  }
-
-  /**
-   * Monitor form inputs for developer embed forms
-   * Captures form data since developer embeds don't provide submission data
-   */
-  function initFormMonitoring() {
-    // Store captured form data globally
-    window._capturedFormData = window._capturedFormData || {};
-    // Track previous values to avoid duplicate logging
-    const previousValues = {};
-    // Track processed elements to avoid duplicate listeners
-    const processedElements = new WeakSet();
-
-    // Function to capture the value
-    function captureValue(input, eventType = "change") {
-      if (!input.name) return;
-
-      let value = input.value;
-      const fieldKey = input.name;
-
-      // Check if value actually changed
-      if (previousValues[fieldKey] === value) {
-        return; // Value hasn't changed, skip
+  defineModule('storage', ['utils'], (utils) => {
+    function getLocalStorage(key) {
+      try {
+        return localStorage.getItem(key);
+      } catch (e) {
+        utils.log('localStorage access failed:', e);
+        return null;
       }
-      previousValues[fieldKey] = value;
+    }
 
-      // Skip HubSpot internal fields
-      if (fieldKey === "hs_context" || fieldKey.startsWith("hs_") || fieldKey === "guid") {
-        return; // Don't track or log HubSpot internal fields
+    function setLocalStorage(key, value) {
+      try {
+        localStorage.setItem(key, value);
+        return true;
+      } catch (e) {
+        utils.log('localStorage write failed:', e);
+        return false;
+      }
+    }
+
+    function getSessionStorage(key) {
+      try {
+        return sessionStorage.getItem(key);
+      } catch (e) {
+        utils.log('sessionStorage access failed:', e);
+        return null;
+      }
+    }
+
+    function setSessionStorage(key, value) {
+      try {
+        sessionStorage.setItem(key, value);
+        return true;
+      } catch (e) {
+        utils.log('sessionStorage write failed:', e);
+        return false;
+      }
+    }
+
+    function getCookie(name) {
+      try {
+        const value = `; ${document.cookie}`;
+        const parts = value.split(`; ${name}=`);
+        if (parts.length === 2) return parts.pop().split(';').shift();
+        return null;
+      } catch (e) {
+        utils.log('Cookie access failed:', e);
+        return null;
+      }
+    }
+
+    function setCookie(name, value, maxAge = 3600) {
+      try {
+        document.cookie = `${name}=${value}; path=/; max-age=${maxAge}`;
+        return true;
+      } catch (e) {
+        utils.log('Cookie write failed:', e);
+        return false;
+      }
+    }
+
+    function removeCookie(name) {
+      try {
+        document.cookie = `${name}=; path=/; max-age=0`;
+        return true;
+      } catch (e) {
+        utils.log('Cookie removal failed:', e);
+        return false;
+      }
+    }
+
+    function storeFormDataWithFallback(data) {
+      const routerData = {
+        scheduler_type: data.schedulerType,
+        formData: data.formData,
+        timestamp: Date.now(),
+        source: 'hubspot_form',
+      };
+
+      if (
+        setSessionStorage('scheduler_router_data', JSON.stringify(routerData))
+      ) {
+        utils.log('Stored router data in sessionStorage');
+        return true;
       }
 
-      // Store the value
-      window._capturedFormData[fieldKey] = value;
+      utils.log('Failed to store in sessionStorage, falling back to cookies');
+      const success1 = setCookie('scheduler_type', data.schedulerType);
+      const success2 = setCookie(
+        'form_data',
+        btoa(JSON.stringify(data.formData))
+      );
 
-      // Only log if there's an actual value
-      if (value) {
-        // Determine field type for better logging
-        let fieldType = input.type || input.tagName.toLowerCase();
+      return success1 && success2;
+    }
 
-        // Special handling for phone fields
-        if (input.type === "tel" || fieldKey.toLowerCase().includes("phone")) {
-          // Also store clean version without formatting
-          const cleanPhone = value.replace(/[\s\-\(\)\.]/g, "");
-          if (cleanPhone) {
-            window._capturedFormData[fieldKey + "_clean"] = cleanPhone;
-          }
-          log("Captured phone:", fieldKey, "=", value);
+    function getStoredFormData() {
+      const localStorageData = getLocalStorage('hubspot_form_data');
+      if (localStorageData) {
+        try {
+          const formData = JSON.parse(localStorageData);
+          utils.log('Found form data in localStorage:', formData);
+          return { formData, source: 'localStorage' };
+        } catch (e) {
+          utils.log('localStorage JSON parse error:', e);
         }
-        // Check if it's a radio button based on type
-        else if (input.type === "radio") {
-          log("Captured radio selection:", fieldKey, "=", value);
+      }
+
+      const sessionStorageData = getSessionStorage('scheduler_router_data');
+      if (sessionStorageData) {
+        try {
+          const data = JSON.parse(sessionStorageData);
+          utils.log('Found router data in sessionStorage:', data);
+          setSessionStorage('scheduler_router_data', '');
+          return {
+            formData: data.formData,
+            schedulerType: data.scheduler_type,
+            source: 'sessionStorage',
+          };
+        } catch (e) {
+          utils.log('sessionStorage JSON parse error:', e);
         }
-        // Hidden inputs are often used for dropdowns in HubSpot
-        else if (input.type === "hidden") {
-          // Skip hs_context and other HubSpot internal fields
-          if (fieldKey === "hs_context" || fieldKey.startsWith("hs_") || fieldKey === "guid") {
-            return; // Don't log HubSpot internal fields
-          }
-          // Check if this is actually a dropdown by looking for nearby dropdown elements
-          const parent = input.closest(".hsfc-DropdownField");
-          if (parent) {
-            log("Captured dropdown:", fieldKey, "=", value);
-          } else {
-            // Only log hidden fields that aren't HubSpot internal
-            log("Captured field:", fieldKey, "=", value);
-          }
+      }
+
+      const schedulerType = getCookie('scheduler_type');
+      const formDataCookie = getCookie('form_data');
+
+      if (schedulerType || formDataCookie) {
+        try {
+          const formData = formDataCookie
+            ? JSON.parse(atob(formDataCookie))
+            : {};
+
+          removeCookie('scheduler_type');
+          removeCookie('form_data');
+
+          utils.log('Found data in cookies:', { schedulerType, formData });
+          return { formData, schedulerType, source: 'cookies' };
+        } catch (e) {
+          utils.log('Cookie JSON parse error:', e);
+        }
+      }
+
+      return null;
+    }
+
+    return {
+      storeFormDataWithFallback,
+      getStoredFormData,
+    };
+  });
+
+  defineModule('dom', ['utils'], (utils) => {
+    class FormMonitor {
+      constructor() {
+        this.capturedFormData = {};
+        this.previousValues = {};
+        this.processedElements = new WeakSet();
+        this.observer = null;
+      }
+
+      init() {
+        this.setupMutationObserver();
+        this.processExistingInputs();
+        utils.log('Form input monitoring activated');
+      }
+
+      setupMutationObserver() {
+        this.observer = new MutationObserver((mutations) => {
+          const addedNodes = [];
+
+          mutations.forEach((mutation) => {
+            mutation.addedNodes.forEach((node) => {
+              if (node.nodeType === 1) {
+                addedNodes.push(node);
+              }
+            });
+          });
+
+          if (addedNodes.length === 0) return;
+
+          addedNodes.forEach((node) => {
+            const inputs = node.querySelectorAll
+              ? node.querySelectorAll(
+                  'input[name], select[name], textarea[name]'
+                )
+              : [];
+
+            if (
+              node.tagName &&
+              ['INPUT', 'SELECT', 'TEXTAREA'].includes(node.tagName) &&
+              node.name
+            ) {
+              this.processInput(node);
+            }
+
+            inputs.forEach((input) => this.processInput(input));
+          });
+        });
+
+        this.observer.observe(document.body, {
+          childList: true,
+          subtree: true,
+        });
+      }
+
+      processExistingInputs() {
+        document
+          .querySelectorAll('input[name], select[name], textarea[name]')
+          .forEach((input) => this.processInput(input));
+      }
+
+      processInput(input) {
+        if (this.processedElements.has(input)) return;
+        this.processedElements.add(input);
+
+        if (input.readOnly && input.type !== 'hidden') return;
+
+        if (input.type === 'hidden' && input.name) {
+          this.setupHiddenInputObserver(input);
+        } else if (input.type === 'radio') {
+          input.addEventListener('change', () => this.captureValue(input));
+        } else if (
+          input.type === 'tel' ||
+          (input.name && input.name.toLowerCase().includes('phone'))
+        ) {
+          input.addEventListener('blur', () => this.captureValue(input));
+          input.addEventListener('change', () => this.captureValue(input));
         } else {
-          log("Captured", fieldType + ":", fieldKey, "=", value);
+          input.addEventListener('change', () => this.captureValue(input));
+          input.addEventListener('blur', () => this.captureValue(input));
+        }
+
+        if (input.value) {
+          this.captureValue(input, 'initial');
         }
       }
-    }
 
-    // Monitor form inputs using MutationObserver
-    function monitorFormInputs() {
-      const observer = new MutationObserver((mutations) => {
-        // Process only new nodes, not all inputs every time
-        const addedNodes = [];
-        mutations.forEach((mutation) => {
-          mutation.addedNodes.forEach((node) => {
-            if (node.nodeType === 1) {
-              // Element node
-              addedNodes.push(node);
+      setupHiddenInputObserver(input) {
+        const observer = new MutationObserver((mutations) => {
+          mutations.forEach((mutation) => {
+            if (
+              mutation.type === 'attributes' &&
+              mutation.attributeName === 'value'
+            ) {
+              this.captureValue(input, 'mutation');
             }
           });
         });
 
-        if (addedNodes.length === 0) return;
-
-        // Find inputs in the newly added nodes
-        addedNodes.forEach((node) => {
-          const inputs = node.querySelectorAll ? node.querySelectorAll("input[name], select[name], textarea[name]") : [];
-
-          // Also check if the node itself is an input
-          if (node.tagName && (node.tagName === "INPUT" || node.tagName === "SELECT" || node.tagName === "TEXTAREA") && node.name) {
-            processInput(node);
-          }
-
-          inputs.forEach((input) => processInput(input));
+        observer.observe(input, {
+          attributes: true,
+          attributeFilter: ['value'],
         });
-      });
 
-      function processInput(input) {
-        // Skip if already processed
-        if (processedElements.has(input)) return;
-        processedElements.add(input);
+        input._mutationObserver = observer;
 
-        // Skip readonly inputs UNLESS they're hidden
-        if (input.readOnly && input.type !== "hidden") return;
-
-        // For hidden inputs, monitor value changes directly
-        if (input.type === "hidden" && input.name) {
-          // Use a simple interval check for hidden inputs (more reliable than property override)
-          let lastValue = input.value;
-          const checkInterval = setInterval(() => {
-            if (input.value !== lastValue) {
-              lastValue = input.value;
-              captureValue(input, "programmatic");
-            }
-            // Stop checking if element is removed
-            if (!document.body.contains(input)) {
-              clearInterval(checkInterval);
-            }
-          }, 500); // Check every 500ms
-
-          // Capture initial value
-          if (input.value) {
-            captureValue(input, "initial");
-          }
-        }
-        // For radio buttons
-        else if (input.type === "radio") {
-          input.addEventListener("change", () => captureValue(input));
-        }
-        // For phone inputs
-        else if (input.type === "tel" || (input.name && input.name.toLowerCase().includes("phone"))) {
-          input.addEventListener("blur", () => captureValue(input));
-          input.addEventListener("change", () => captureValue(input));
-        }
-        // For other inputs
-        else {
-          input.addEventListener("change", () => captureValue(input));
-          input.addEventListener("blur", () => captureValue(input));
-
-          // Capture initial value if present
-          if (input.value) {
-            captureValue(input, "initial");
-          }
+        if (input.value) {
+          this.captureValue(input, 'initial');
         }
       }
 
-      // Process any existing inputs on page load
-      document.querySelectorAll("input[name], select[name], textarea[name]").forEach(processInput);
+      captureValue(input, eventType = 'change') {
+        if (!input.name) return;
 
-      observer.observe(document.body, {
-        childList: true,
-        subtree: true,
-      });
+        let value = input.value;
+        const fieldKey = input.name;
 
-      log("Form input monitoring activated");
+        if (this.previousValues[fieldKey] === value) {
+          return;
+        }
+        this.previousValues[fieldKey] = value;
+
+        if (this.isHubSpotInternalField(fieldKey)) {
+          return;
+        }
+
+        this.capturedFormData[fieldKey] = value;
+
+        if (value) {
+          this.logCapturedValue(input, fieldKey, value, eventType);
+        }
+      }
+
+      isHubSpotInternalField(fieldKey) {
+        return (
+          fieldKey === 'hs_context' ||
+          fieldKey.startsWith('hs_') ||
+          fieldKey === 'guid'
+        );
+      }
+
+      logCapturedValue(input, fieldKey, value, eventType) {
+        let fieldType = input.type || input.tagName.toLowerCase();
+
+        if (input.type === 'tel' || fieldKey.toLowerCase().includes('phone')) {
+          const cleanPhone = value.replace(/[\s\-\(\)\.]/g, '');
+          if (cleanPhone) {
+            this.capturedFormData[fieldKey + '_clean'] = cleanPhone;
+          }
+          utils.log('Captured phone:', fieldKey, '=', value);
+        } else if (input.type === 'radio') {
+          utils.log('Captured radio selection:', fieldKey, '=', value);
+        } else if (input.type === 'hidden') {
+          const parent = input.closest('.hsfc-DropdownField');
+          if (parent) {
+            utils.log('Captured dropdown:', fieldKey, '=', value);
+          } else {
+            utils.log('Captured field:', fieldKey, '=', value);
+          }
+        } else {
+          utils.log('Captured', fieldType + ':', fieldKey, '=', value);
+        }
+      }
+
+      getCapturedData() {
+        return { ...this.capturedFormData };
+      }
+
+      destroy() {
+        if (this.observer) {
+          this.observer.disconnect();
+        }
+
+        this.processedElements.forEach((input) => {
+          if (input._mutationObserver) {
+            input._mutationObserver.disconnect();
+          }
+        });
+      }
     }
 
-    // Start monitoring when DOM is ready
-    if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", monitorFormInputs);
-    } else {
-      monitorFormInputs();
-    }
-  }
+    return { FormMonitor };
+  });
 
-  /**
-   * PostMessage event listener for HubSpot form submissions
-   */
-  function initPostMessageListener(options = {}) {
-    log("Initializing postMessage listener");
+  defineModule(
+    'router',
+    ['config', 'utils', 'storage', 'dom'],
+    (config, utils, storage, dom) => {
+      class HubSpotRouter {
+        constructor(options = {}) {
+          this.options = {
+            redirect: true,
+            debug: utils.DEBUG,
+            ...options,
+          };
 
-    window.addEventListener("message", function (event) {
-      // Verify the message is from HubSpot (broadened to hsforms.com)
-      const isValidOrigin = (function (orig) {
-        try {
-          const host = new URL(orig).hostname;
-          return host.endsWith("hubspot.com") || host.endsWith("hsforms.com") || host.endsWith("hsforms.net") || host.endsWith("hsappstatic.net") || host.includes("hubspot") || host.includes("hsforms");
-        } catch (e) {
-          return false;
+          this.hasRouted = false;
+          this.formMonitor = null;
+
+          utils.log('HubSpot Router initialized with options:', this.options);
         }
-      })(event.origin);
 
-      if (!isValidOrigin) {
-        return;
-      }
+        init() {
+          utils.log('Initializing HubSpot Router...');
 
-      // Some HubSpot messages send stringified JSON
-      let payload = event.data;
-      if (typeof payload === "string") {
-        try {
-          payload = JSON.parse(payload);
-        } catch (_) {
-          /* ignore */
+          this.initFormMonitoring();
+          this.initPostMessageListener();
+
+          if (this.options.debug) {
+            this.exposeDebugApi();
+          }
+
+          utils.log('HubSpot Router initialization complete');
         }
-      }
 
-      log("Received message from HubSpot:", payload);
+        initFormMonitoring() {
+          this.formMonitor = new dom.FormMonitor();
+          this.formMonitor.init();
 
-      // Support both `type` and `messageType`
-      const msgType = payload && (payload.type || payload.messageType);
-      const eventName = payload && payload.eventName;
+          window._capturedFormData = this.formMonitor.getCapturedData();
 
-      // Check for standard form submission event
-      if (payload && msgType === "hsFormCallback" && (eventName === "onFormSubmitted" || eventName === "onFormSubmit")) {
-        const submissionData = payload.data;
-        if (submissionData) {
-          const normalized = normalizeFormData(submissionData);
-          handleFormSubmission(normalized, options);
+          const originalCapture = this.formMonitor.captureValue.bind(
+            this.formMonitor
+          );
+          this.formMonitor.captureValue = (...args) => {
+            originalCapture(...args);
+            window._capturedFormData = this.formMonitor.getCapturedData();
+          };
         }
-      }
-      // Check for developer embed submission (accepted: true)
-      else if (payload && payload.formGuid && payload.accepted === true) {
-        log("Developer embed submission detected");
-        log("Using captured form data:", window._capturedFormData);
 
-        // Use captured form data for developer embeds
-        if (window._capturedFormData && Object.keys(window._capturedFormData).length > 0) {
-          // Also store captured form data in localStorage for prefill
+        initPostMessageListener() {
+          utils.log('Initializing postMessage listener');
+
+          window.addEventListener('message', this.handleMessage.bind(this));
+          utils.log('PostMessage listener initialized');
+        }
+
+        handleMessage(event) {
+          if (!utils.isValidHubSpotOrigin(event.origin)) {
+            return;
+          }
+
+          let payload = event.data;
+          if (typeof payload === 'string') {
+            try {
+              payload = JSON.parse(payload);
+            } catch {
+              return;
+            }
+          }
+
+          utils.log('Received message from HubSpot:', payload);
+
+          const msgType = payload && (payload.type || payload.messageType);
+          const eventName = payload && payload.eventName;
+
+          if (this.isFormSubmission(payload, msgType, eventName)) {
+            this.handleFormSubmission(payload.data);
+          } else if (this.isDeveloperEmbedSubmission(payload)) {
+            this.handleDeveloperEmbedSubmission();
+          } else if (this.options.debug && msgType === 'hsFormCallback') {
+            utils.log('Ignoring hsFormCallback event:', eventName);
+          }
+        }
+
+        isFormSubmission(payload, msgType, eventName) {
+          return (
+            payload &&
+            msgType === 'hsFormCallback' &&
+            (eventName === 'onFormSubmitted' || eventName === 'onFormSubmit')
+          );
+        }
+
+        isDeveloperEmbedSubmission(payload) {
+          return payload && payload.formGuid && payload.accepted === true;
+        }
+
+        handleFormSubmission(submissionData) {
+          utils.log('Form submission detected:', submissionData);
+
+          if (this.hasRouted) {
+            utils.log('Routing already performed; skipping');
+            return;
+          }
+
+          this.hasRouted = true;
+
+          const normalizedData = utils.normalizeFormData(submissionData);
+          this.processFormSubmission(normalizedData);
+        }
+
+        handleDeveloperEmbedSubmission() {
+          utils.log('Developer embed submission detected');
+
+          if (this.hasRouted) {
+            utils.log('Routing already performed; skipping');
+            return;
+          }
+
+          this.hasRouted = true;
+
+          const capturedData = this.formMonitor.getCapturedData();
+          utils.log('Using captured form data:', capturedData);
+
+          if (Object.keys(capturedData).length > 0) {
+            try {
+              storage.setLocalStorage(
+                'hubspot_form_data',
+                JSON.stringify(capturedData)
+              );
+              utils.log(
+                'Stored captured form data in localStorage for prefill'
+              );
+            } catch (e) {
+              utils.log(
+                'Failed to store captured form data in localStorage:',
+                e
+              );
+            }
+
+            this.processFormSubmission(capturedData);
+          }
+        }
+
+        processFormSubmission(formData) {
+          const schedulerType = utils.determineSchedulerType(formData);
+          this.redirectToScheduler(formData, schedulerType);
+          this.fireAnalyticsEvents(schedulerType, formData);
+        }
+
+        redirectToScheduler(formData, schedulerType) {
+          const success = storage.storeFormDataWithFallback({
+            schedulerType,
+            formData,
+            timestamp: Date.now(),
+            source: 'hubspot_form',
+          });
+
+          if (!success) {
+            utils.log('Failed to store form data');
+          }
+
+          const params = new URLSearchParams();
+          if (formData.email) {
+            params.set('email', formData.email);
+          }
+
+          const redirectUrl = `/hs-scheduler/ty-general${params.toString() ? '?' + params.toString() : ''}`;
+          utils.log('Redirecting to:', redirectUrl);
+          window.location.href = redirectUrl;
+        }
+
+        fireAnalyticsEvents(schedulerType, formData) {
           try {
-            localStorage.setItem("hubspot_form_data", JSON.stringify(window._capturedFormData));
-            log("Stored captured form data in localStorage for prefill");
+            if (typeof window.amplitude !== 'undefined') {
+              window.amplitude.track('scheduler_router_triggered', {
+                scheduler_type: schedulerType,
+                has_email: !!formData.email,
+                has_name: !!(formData.firstname || formData.first_name),
+              });
+            }
+
+            if (typeof window.posthog !== 'undefined') {
+              window.posthog.capture('scheduler_router_triggered', {
+                scheduler_type: schedulerType,
+                method: 'redirect',
+              });
+            }
+
+            utils.log('Analytics events fired');
           } catch (e) {
-            log("Failed to store captured form data in localStorage:", e);
+            utils.log('Analytics tracking error:', e);
           }
-          
-          handleFormSubmission(window._capturedFormData, options);
         }
-      } else if (payload && msgType === "hsFormCallback" && DEBUG) {
-        // Helpful debug for other HS callbacks (ready, inlineMessage, etc.)
-        log("Ignoring hsFormCallback event:", eventName);
+
+        exposeDebugApi() {
+          window.HubSpotRouterDebug = {
+            config: config.SCHEDULER_CONFIG,
+            determineSchedulerType: utils.determineSchedulerType,
+            buildSchedulerUrl: utils.buildSchedulerUrl,
+            handleFormSubmission: this.handleFormSubmission.bind(this),
+            getCapturedData: () => this.formMonitor.getCapturedData(),
+            router: this,
+          };
+
+          utils.log('Debug API exposed via window.HubSpotRouterDebug');
+        }
+
+        destroy() {
+          if (this.formMonitor) {
+            this.formMonitor.destroy();
+          }
+
+          window.removeEventListener('message', this.handleMessage.bind(this));
+          utils.log('HubSpot Router destroyed');
+        }
       }
-    });
 
-    log("PostMessage listener initialized");
-  }
-
-  /**
-   * Initialize the router with options
-   */
-  function init(options = {}) {
-    const defaultOptions = {
-      redirect: true, // Always redirect instead of embed
-      debug: DEBUG,
-    };
-
-    const config = { ...defaultOptions, ...options };
-
-    if (config.debug) {
-      window.HubSpotRouterDebug = {
-        config: SCHEDULER_CONFIG,
-        determineSchedulerType,
-        buildSchedulerUrl,
-        handleFormSubmission,
-      };
-      log("Debug mode enabled. Access via window.HubSpotRouterDebug");
+      return HubSpotRouter;
     }
+  );
 
-    // Initialize form monitoring for developer embeds
-    initFormMonitoring();
-
-    // Initialize postMessage listener
-    initPostMessageListener(config);
-
-    log("HubSpot Form Router initialized with config:", config);
-  }
+  // Initialize the router
+  const HubSpotRouter = modules.router;
+  const router = new HubSpotRouter({
+    debug: modules.utils.DEBUG,
+    redirect: true,
+  });
 
   // Auto-initialize on DOM ready
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", () => init());
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => router.init());
   } else {
-    init();
+    router.init();
   }
 
   // Expose public API (merge with existing if already defined)
   window.HubSpotRouter = {
     ...window.HubSpotRouter,
-    init,
-    handleFormSubmission,
-    determineSchedulerType,
-    buildSchedulerUrl,
-    config: SCHEDULER_CONFIG,
-    DEBUG: DEBUG,
+    init: (options) => router.init(options),
+    handleFormSubmission: (data) => router.handleFormSubmission(data),
+    determineSchedulerType: (data) =>
+      modules.utils.determineSchedulerType(data),
+    buildSchedulerUrl: (type, data) =>
+      modules.utils.buildSchedulerUrl(type, data),
+    config: modules.config.SCHEDULER_CONFIG,
+    DEBUG: modules.utils.DEBUG,
   };
 
-  log("HubSpot Form Router loaded");
+  modules.utils.log('HubSpot Form Router loaded');
 })();
