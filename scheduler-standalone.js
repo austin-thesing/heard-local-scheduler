@@ -206,9 +206,7 @@
     // Build URL for forced round-robin scheduler (maps to sole_prop config)
     const configSource = window.HubSpotRouter && window.HubSpotRouter.config ? window.HubSpotRouter.config : FALLBACK_SCHEDULER_CONFIG;
     const selectedConfig = configSource[CONFIG_SCHEDULER_TYPE] || configSource.sole_prop;
-    const schedulerUrl = window.HubSpotRouter && typeof window.HubSpotRouter.buildSchedulerUrl === "function"
-      ? window.HubSpotRouter.buildSchedulerUrl(CONFIG_SCHEDULER_TYPE, params)
-      : buildSchedulerUrlFallback(CONFIG_SCHEDULER_TYPE, params);
+    const schedulerUrl = window.HubSpotRouter && typeof window.HubSpotRouter.buildSchedulerUrl === "function" ? window.HubSpotRouter.buildSchedulerUrl(CONFIG_SCHEDULER_TYPE, params) : buildSchedulerUrlFallback(CONFIG_SCHEDULER_TYPE, params);
 
     log("Loading scheduler:", selectedConfig && selectedConfig.name ? selectedConfig.name : "Round Robin");
     log("URL:", schedulerUrl);
