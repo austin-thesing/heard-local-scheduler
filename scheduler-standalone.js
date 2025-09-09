@@ -12,6 +12,10 @@
     if (DEBUG) console.log("[Scheduler Display]", ...args);
   }
 
+  // Force round-robin scheduler; ignore SCORP path
+  const CONFIG_SCHEDULER_TYPE = "sole_prop"; // used to build URL via config
+  const ANALYTICS_SCHEDULER_TYPE = "round_robin"; // used for event naming
+
   // Local fallback config so this script can run without the router loaded
   const FALLBACK_SCHEDULER_CONFIG = {
     sole_prop: {
@@ -190,37 +194,23 @@
     const urlParams = getQueryParams();
     const routerData = getRouterData();
 
-    // Combine data
+    // Merge URL params with any router-provided form data
     let params = { ...urlParams };
-    let schedulerType = urlParams.scheduler_type;
-
-    if (routerData) {
-      if (routerData.formData) {
-        params = { ...params, ...routerData.formData };
-      }
-      if (routerData.scheduler_type) {
-        schedulerType = routerData.scheduler_type;
-      }
+    if (routerData && routerData.formData) {
+      params = { ...params, ...routerData.formData };
     }
 
     log("Params:", params);
-    log("Scheduler type:", schedulerType);
+    log("Forcing round-robin scheduler (ignoring scheduler_type)");
 
-    // Determine scheduler type if not provided
-    if (!schedulerType) {
-      if (window.HubSpotRouter && typeof window.HubSpotRouter.determineSchedulerType === "function") {
-        schedulerType = window.HubSpotRouter.determineSchedulerType(params);
-      } else {
-        schedulerType = determineSchedulerTypeFallback(params);
-      }
-    }
-
-    // Get scheduler URL (prefer router implementation, fallback to local)
+    // Build URL for forced round-robin scheduler (maps to sole_prop config)
     const configSource = window.HubSpotRouter && window.HubSpotRouter.config ? window.HubSpotRouter.config : FALLBACK_SCHEDULER_CONFIG;
-    const config = configSource[schedulerType] || configSource.sole_prop;
-    const schedulerUrl = window.HubSpotRouter && typeof window.HubSpotRouter.buildSchedulerUrl === "function" ? window.HubSpotRouter.buildSchedulerUrl(schedulerType, params) : buildSchedulerUrlFallback(schedulerType, params);
+    const selectedConfig = configSource[CONFIG_SCHEDULER_TYPE] || configSource.sole_prop;
+    const schedulerUrl = window.HubSpotRouter && typeof window.HubSpotRouter.buildSchedulerUrl === "function"
+      ? window.HubSpotRouter.buildSchedulerUrl(CONFIG_SCHEDULER_TYPE, params)
+      : buildSchedulerUrlFallback(CONFIG_SCHEDULER_TYPE, params);
 
-    log("Loading scheduler:", config.name);
+    log("Loading scheduler:", selectedConfig && selectedConfig.name ? selectedConfig.name : "Round Robin");
     log("URL:", schedulerUrl);
 
     // Inject the scheduler
@@ -231,7 +221,7 @@
     script.src = "https://static.hsappstatic.net/MeetingsEmbed/ex/MeetingsEmbedCode.js";
     script.onload = function () {
       log("Scheduler loaded");
-      fireLeadEvents(schedulerType);
+      fireLeadEvents(ANALYTICS_SCHEDULER_TYPE);
     };
     script.onerror = function () {
       console.error("[Scheduler Display] Failed to load scheduler");
