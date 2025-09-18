@@ -1,26 +1,47 @@
 {
   "name": "heard-local-scheduler",
+  "version": "1.0.0",
   "private": true,
-  "version": "0.0.0",
   "type": "module",
+  "description": "HubSpot form router and Webflow scheduler integration for Heard",
+  "main": "dist/bundle.js",
   "scripts": {
-    "build": "rm -rf dist && bun build src/bundle.js --outdir=dist --minify --format=iife",
-    "build:legacy": "rm -rf dist && bun build scheduler-redirect-new.js webflow-scheduler-complete-new.js form.css --outdir=dist --minify",
-    "build:all": "bun run build && bun run build:legacy",
-    "dev": "bun build src/bundle.js --outdir=dist --format=iife --watch",
-    "lint": "eslint src/ --ext .js",
-    "format": "prettier --write src/ **/*.js",
-    "type-check": "tsc --noEmit",
+    "build": "rm -rf dist && bun build src/bundle.js --outdir=dist --minify --format=iife && cp form.css dist/",
+    "build:legacy": "npm run build && echo 'Legacy standalone files are already available in root directory'",
+    "dev": "bun build src/bundle.js --outdir=dist --watch",
     "test": "bun test",
-    "clean": "rm -rf dist node_modules .turbo"
+    "test:watch": "bun test --watch",
+    "lint": "eslint src/**/*.js tests/**/*.js",
+    "lint:fix": "eslint src/**/*.js tests/**/*.js --fix",
+    "format": "prettier --write \"src/**/*.{js,ts}\" \"tests/**/*.{js,ts}\"",
+    "format:check": "prettier --check \"src/**/*.{js,ts}\" \"tests/**/*.{js,ts}\"",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist coverage node_modules/.cache"
   },
+  "keywords": [
+    "hubspot",
+    "webflow",
+    "scheduler",
+    "form-routing",
+    "javascript"
+  ],
+  "author": "Heard",
+  "license": "MIT",
   "devDependencies": {
-    "@types/bun": "^1.0.0",
+    "@types/bun": "latest",
+    "@types/node": "^20.0.0",
     "eslint": "^8.57.0",
-    "prettier": "^3.2.5",
-    "typescript": "^5.3.3"
+    "prettier": "^3.0.0",
+    "typescript": "^5.0.0"
   },
   "engines": {
-    "node": ">=18.0.0"
-  }
+    "node": ">=18.0.0",
+    "bun": ">=1.0.0"
+  },
+  "files": [
+    "dist/",
+    "src/",
+    "README.md",
+    "LICENSE"
+  ]
 }

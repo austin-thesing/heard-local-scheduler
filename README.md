@@ -75,6 +75,48 @@ bun run format
 bun run type-check
 ```
 
+## 📖 Usage
+
+### Option 1: Modular Bundle (Recommended)
+Use the compiled bundle that includes all functionality in a single optimized file:
+
+```html
+<!-- Load HubSpot form -->
+<script src="https://js.hsforms.net/forms/embed/developer/7507639.js" defer></script>
+<div class="hs-form-html" data-region="na1" data-form-id="YOUR_FORM_ID" data-portal-id="YOUR_PORTAL_ID"></div>
+
+<!-- Load the scheduler bundle -->
+<script src="dist/bundle.js"></script>
+<link rel="stylesheet" href="dist/form.css">
+```
+
+### Option 2: Legacy Standalone Files (Backward Compatibility)
+Use the individual files for existing integrations:
+
+```html
+<!-- Load HubSpot form -->
+<script src="https://js.hsforms.net/forms/embed/developer/7507639.js" defer></script>
+<div class="hs-form-html" data-region="na1" data-form-id="YOUR_FORM_ID" data-portal-id="YOUR_PORTAL_ID"></div>
+
+<!-- Load individual scheduler files -->
+<script src="scheduler-redirect.js"></script>
+<link rel="stylesheet" href="form.css">
+```
+
+### Option 3: Module Imports (Advanced)
+Import specific modules in modern JavaScript environments:
+
+```javascript
+import { HubSpotRouter } from './src/core/HubSpotRouter.js';
+import { WebflowScheduler } from './src/core/WebflowScheduler.js';
+
+// Initialize with custom options
+const router = new HubSpotRouter({
+  debug: true,
+  customConfig: {...}
+});
+```
+
 ## 🔧 Configuration
 
 ### Scheduler Configuration
