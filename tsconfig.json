@@ -1,6 +1,5 @@
 {
   "compilerOptions": {
-    "composite": true,
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "node",
@@ -46,20 +45,12 @@
     "typeRoots": ["./node_modules/@types", "./src/types"],
     "types": ["bun"]
   },
-  "include": [
-    "src/**/*",
-    "tests/**/*"
-  ],
+  "include": ["src/**/*", "tests/**/*"],
   "exclude": [
     "node_modules",
     "dist",
     "coverage",
     "**/*.test.js",
     "**/*.spec.js"
-  ],
-  "references": [
-    {
-      "path": "./tsconfig.node.json"
-    }
   ]
 }

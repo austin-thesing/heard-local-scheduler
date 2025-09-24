@@ -6,9 +6,9 @@
   "description": "HubSpot form router and Webflow scheduler integration for Heard",
   "main": "dist/bundle.js",
   "scripts": {
-    "build": "rm -rf dist && bun build src/bundle.js --outdir=dist --minify --format=iife && cp form.css dist/",
+    "build": "rm -rf dist && bun build src/bundle.js src/sitewide.js --outdir=dist --minify --format=iife && cp form.css dist/",
     "build:legacy": "npm run build && echo 'Legacy standalone files are already available in root directory'",
-    "dev": "bun build src/bundle.js --outdir=dist --watch",
+    "dev": "bun build src/bundle.js src/sitewide.js --outdir=dist --watch",
     "test": "bun test",
     "test:watch": "bun test --watch",
     "lint": "eslint src/**/*.js tests/**/*.js",

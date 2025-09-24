@@ -5,18 +5,21 @@ A modern, refactored HubSpot form routing and Webflow scheduler system with impr
 ## 🚀 What's New
 
 ### Architecture Improvements
+
 - **Modular Design**: Split monolithic IIFEs into focused modules
 - **ES6 Modules**: Proper import/export structure for better code organization
 - **Encapsulation**: Eliminated global namespace pollution
 - **Separation of Concerns**: Clear boundaries between utilities, core logic, and configuration
 
 ### Security Enhancements
+
 - **XSS Prevention**: Input sanitization for all user data
 - **Secure Origin Validation**: Improved HubSpot domain validation
 - **Safe HTML Injection**: DOMParser-based HTML injection instead of innerHTML
 - **Consistent Error Handling**: Proper error boundaries throughout
 
 ### Performance Optimizations
+
 - **Efficient DOM Monitoring**: Replaced polling with MutationObserver
 - **Reduced Code Duplication**: Shared utilities eliminate repeated logic
 - **Optimized Storage Handling**: Better fallback mechanisms and error recovery
@@ -45,10 +48,12 @@ webflow-scheduler-complete-new.js # Refactored Webflow scheduler
 ## 🛠️ Development
 
 ### Prerequisites
+
 - Node.js >= 18.0.0
 - Bun (recommended) or npm
 
 ### Setup
+
 ```bash
 # Install dependencies
 bun install
@@ -77,33 +82,55 @@ bun run type-check
 
 ## 📖 Usage
 
-### Option 1: Modular Bundle (Recommended)
-Use the compiled bundle that includes all functionality in a single optimized file:
+### Option 1: Site-wide PartnerStack capture + targeted router/scheduler (Recommended)
+
+Load a tiny site-wide script everywhere to capture PartnerStack `ps_xid` across subdomains, and only load the heavy router/scheduler on relevant pages.
 
 ```html
-<!-- Load HubSpot form -->
-<script src="https://js.hsforms.net/forms/embed/developer/7507639.js" defer></script>
-<div class="hs-form-html" data-region="na1" data-form-id="YOUR_FORM_ID" data-portal-id="YOUR_PORTAL_ID"></div>
+<!-- Site-wide: capture PartnerStack ps_xid (include on all pages, marketing + app) -->
+<script src="/dist/sitewide.js"></script>
 
-<!-- Load the scheduler bundle -->
-<script src="dist/bundle.js"></script>
-<link rel="stylesheet" href="dist/form.css">
+<!-- HubSpot form (developer embed) only on form pages -->
+<script
+  src="https://js.hsforms.net/forms/embed/developer/7507639.js"
+  defer
+></script>
+<div
+  class="hs-form-html"
+  data-region="na1"
+  data-form-id="YOUR_FORM_ID"
+  data-portal-id="YOUR_PORTAL_ID"
+></div>
+
+<!-- Router/Scheduler only on pages with forms or scheduler -->
+<script src="/dist/bundle.js"></script>
+<link rel="stylesheet" href="/dist/form.css" />
 ```
 
 ### Option 2: Legacy Standalone Files (Backward Compatibility)
+
 Use the individual files for existing integrations:
 
 ```html
 <!-- Load HubSpot form -->
-<script src="https://js.hsforms.net/forms/embed/developer/7507639.js" defer></script>
-<div class="hs-form-html" data-region="na1" data-form-id="YOUR_FORM_ID" data-portal-id="YOUR_PORTAL_ID"></div>
+<script
+  src="https://js.hsforms.net/forms/embed/developer/7507639.js"
+  defer
+></script>
+<div
+  class="hs-form-html"
+  data-region="na1"
+  data-form-id="YOUR_FORM_ID"
+  data-portal-id="YOUR_PORTAL_ID"
+></div>
 
 <!-- Load individual scheduler files -->
 <script src="scheduler-redirect.js"></script>
-<link rel="stylesheet" href="form.css">
+<link rel="stylesheet" href="form.css" />
 ```
 
 ### Option 3: Module Imports (Advanced)
+
 Import specific modules in modern JavaScript environments:
 
 ```javascript
@@ -120,6 +147,7 @@ const router = new HubSpotRouter({
 ## 🔧 Configuration
 
 ### Scheduler Configuration
+
 ```javascript
 // src/config/scheduler-config.js
 export const SCHEDULER_CONFIG = {
@@ -137,10 +165,17 @@ export const SCHEDULER_CONFIG = {
 ```
 
 ### Field Mappings
+
 ```javascript
 export const FIELD_MAPPINGS = {
   email: ['email', 'email_address', '0-1/email', '0-2/email'],
-  firstName: ['firstname', 'first_name', 'fname', '0-1/firstname', '0-2/firstname'],
+  firstName: [
+    'firstname',
+    'first_name',
+    'fname',
+    '0-1/firstname',
+    '0-2/firstname',
+  ],
   // ... more mappings
 };
 ```
@@ -148,12 +183,13 @@ export const FIELD_MAPPINGS = {
 ## 📊 Usage
 
 ### HubSpot Router
+
 ```javascript
 import { createRouter } from './src/core/HubSpotRouter.js';
 
 const router = createRouter({
   debug: true,
-  redirect: true
+  redirect: true,
 });
 
 // Manual initialization
@@ -161,11 +197,25 @@ router.init();
 ```
 
 ### Webflow Scheduler
+
+### PartnerStack attribution (app side)
+
+On the app (e.g., `app.joinheard.com`), include `dist/sitewide.js` so the `ps_xid` cookie is shared across `*.joinheard.com`. Then read the value before sending your conversion to PartnerStack:
+
+```javascript
+// If sitewide.js is loaded
+const { ps_xid } = window.PartnerStackAttribution.get();
+
+// Send with your customer_key to your backend for S2S conversion
+```
+
+If marketing lives on a different apex domain, decorate CTA links to the app with `ps_xid` query param and capture it on the app.
+
 ```javascript
 import { createScheduler } from './src/core/WebflowScheduler.js';
 
 const scheduler = createScheduler({
-  debug: true
+  debug: true,
 });
 
 // Manual initialization
@@ -175,6 +225,7 @@ scheduler.init();
 ## 🔒 Security Features
 
 ### Input Sanitization
+
 ```javascript
 import { sanitizeInput } from './src/utils/form-utils.js';
 
@@ -182,6 +233,7 @@ const cleanInput = sanitizeInput(userInput); // Escapes HTML entities
 ```
 
 ### Safe HTML Injection
+
 ```javascript
 import { safeHtmlInjection } from './src/utils/dom-utils.js';
 
@@ -189,6 +241,7 @@ const success = safeHtmlInjection(targetElement, htmlString);
 ```
 
 ### Secure Origin Validation
+
 ```javascript
 import { isValidHubSpotOrigin } from './src/utils/url-utils.js';
 
@@ -198,6 +251,7 @@ const isValid = isValidHubSpotOrigin(messageOrigin);
 ## 🐛 Debugging
 
 ### Debug Mode
+
 Enable debug mode by adding `debug=true` to URL parameters or running on localhost:
 
 ```javascript
@@ -206,6 +260,7 @@ Enable debug mode by adding `debug=true` to URL parameters or running on localho
 ```
 
 ### Debug APIs
+
 When debug mode is enabled, additional APIs are exposed:
 
 ```javascript
@@ -216,7 +271,7 @@ window.HubSpotRouterDebug = {
   buildSchedulerUrl,
   handleFormSubmission,
   getCapturedData,
-  router: routerInstance
+  router: routerInstance,
 };
 
 // Webflow Scheduler debug
@@ -226,7 +281,7 @@ window.WebflowSchedulerComplete = {
   buildSchedulerUrl,
   handleScheduler,
   fireLeadEvents,
-  config: ROUND_ROBIN_CONFIG
+  config: ROUND_ROBIN_CONFIG,
 };
 ```
 
@@ -243,6 +298,7 @@ The system automatically fires tracking events to multiple platforms:
 ## 🔄 Migration from Legacy
 
 ### Step 1: Replace Script Tags
+
 ```html
 <!-- Old -->
 <script src="scheduler-redirect.js"></script>
@@ -253,11 +309,12 @@ The system automatically fires tracking events to multiple platforms:
 ```
 
 ### Step 2: Update Configuration
+
 Move hardcoded values to configuration files:
 
 ```javascript
 // Old: Hardcoded in multiple places
-const url = "https://meetings.hubspot.com/bz/consultation";
+const url = 'https://meetings.hubspot.com/bz/consultation';
 
 // New: Centralized configuration
 import { SCHEDULER_CONFIG } from './src/config/scheduler-config.js';
@@ -265,6 +322,7 @@ const url = SCHEDULER_CONFIG.sole_prop.url;
 ```
 
 ### Step 3: Update API Usage
+
 ```javascript
 // Old: Global namespace
 window.HubSpotRouter.handleFormSubmission(data);

@@ -324,14 +324,29 @@ export class HubSpotRouter {
   /**
    * Cleanup resources
    */
+export class HubSpotRouter {
+  constructor(options = {}) {
+    // ... existing code ...
+    this.boundHandleMessage = null;
+  }
+
+  initPostMessageListener() {
+    this.logger.log('Initializing postMessage listener');
+   this.boundHandleMessage = this.handleMessage.bind(this);
+   window.addEventListener('message', this.boundHandleMessage);
+    this.logger.log('PostMessage listener initialized');
+  }
+
   destroy() {
     if (this.formMonitor) {
       this.formMonitor.destroy();
     }
-
-    window.removeEventListener('message', this.handleMessage.bind(this));
+   if (this.boundHandleMessage) {
+     window.removeEventListener('message', this.boundHandleMessage);
+   }
     this.logger.log('HubSpot Router destroyed');
   }
+}
 }
 
 /**
