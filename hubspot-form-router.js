@@ -276,7 +276,7 @@
 
   /**
    * Determine scheduler type based on form data
-   * Routes to 'success' for soft rejections, 'general' for scheduler
+   * Routes to 'success' if NO to either question, 'general' if YES to both
    */
   function determineSchedulerType(formData) {
     // Check multi-practice questions
@@ -284,25 +284,43 @@
       formData,
       MULTI_PRACTICE_FIELDS
     );
-    if (multiPracticeResponse && isNegative(multiPracticeResponse)) {
-      log('Multi-practice question answered "no", routing to success page', {
-        field: MULTI_PRACTICE_FIELDS.find((field) => formData[field]),
-        value: multiPracticeResponse,
-      });
-      return 'success';
-    }
+    const hasMultiPracticeYes =
+      multiPracticeResponse && isAffirmative(multiPracticeResponse);
 
     // Check income threshold questions
     const incomeResponse = findFirstValue(formData, INCOME_THRESHOLD_FIELDS);
-    if (incomeResponse && isNegative(incomeResponse)) {
-      log('Income threshold question answered "no", routing to success page', {
-        field: INCOME_THRESHOLD_FIELDS.find((field) => formData[field]),
-        value: incomeResponse,
+    const hasIncomeYes = incomeResponse && isAffirmative(incomeResponse);
+
+    // Route to success if either question is answered "no" or not answered
+    if (!hasMultiPracticeYes) {
+      log('Multi-practice question not answered yes, routing to success page', {
+        field: MULTI_PRACTICE_FIELDS.find((field) => formData[field]),
+        value: multiPracticeResponse,
+        hasYes: hasMultiPracticeYes,
       });
       return 'success';
     }
 
-    log('Routing submission to general scheduler', formData);
+    if (!hasIncomeYes) {
+      log(
+        'Income threshold question not answered yes, routing to success page',
+        {
+          field: INCOME_THRESHOLD_FIELDS.find((field) => formData[field]),
+          value: incomeResponse,
+          hasYes: hasIncomeYes,
+        }
+      );
+      return 'success';
+    }
+
+    // Only route to scheduler if BOTH questions are answered "yes"
+    log(
+      'Both income and multi-practice questions answered yes, routing to scheduler',
+      {
+        multiPracticeValue: multiPracticeResponse,
+        incomeValue: incomeResponse,
+      }
+    );
     return 'general';
   }
 
