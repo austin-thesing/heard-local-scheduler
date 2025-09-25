@@ -561,9 +561,22 @@
     function captureValue(input, eventType = 'change') {
       if (!input.name) return;
 
-      let value = input.value;
       const fieldKey = input.name;
       const canonicalFieldKey = canonicalKey(fieldKey);
+
+      const rawValue = input.value;
+      let value = rawValue;
+
+      // For radio buttons, store the display label instead of the internal option id
+      if (input.type === 'radio') {
+        const label = input.closest('label');
+        if (label && label.textContent) {
+          const labelText = label.textContent.replace(/\s+/g, ' ').trim();
+          if (labelText) {
+            value = labelText;
+          }
+        }
+      }
 
       // Check if value actually changed
       if (previousValues[fieldKey] === value) {
@@ -586,6 +599,13 @@
         window._capturedFormData[canonicalFieldKey] = value;
       }
 
+      if (input.type === 'radio') {
+        window._capturedFormData[`${fieldKey}_raw`] = rawValue;
+        if (canonicalFieldKey && canonicalFieldKey !== fieldKey) {
+          window._capturedFormData[`${canonicalFieldKey}_raw`] = rawValue;
+        }
+      }
+
       // Only log if there's an actual value
       if (value) {
         // Determine field type for better logging
@@ -602,7 +622,15 @@
         }
         // Check if it's a radio button based on type
         else if (input.type === 'radio') {
-          log('Captured radio selection:', fieldKey, '=', value);
+          log(
+            'Captured radio selection:',
+            fieldKey,
+            '=',
+            value,
+            '(raw:',
+            rawValue,
+            ')'
+          );
         }
         // Hidden inputs are often used for dropdowns in HubSpot
         else if (input.type === 'hidden') {
