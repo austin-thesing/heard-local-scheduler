@@ -7,19 +7,101 @@
 (function () {
   'use strict';
 
-  // Configuration for different scheduler types
+  // Single scheduler destination configuration
   const SCHEDULER_CONFIG = {
-    sole_prop: {
+    general: {
       url: 'https://meetings.hubspot.com/bz/consultation',
-      name: 'Sole Proprietor Consultation',
-      description: 'For single-owner practices',
+      name: 'Consultation Scheduler',
+      description: 'General consultation scheduling',
     },
-    // s_corp: {
-    //   url: 'https://meetings.hubspot.com/bz/consultations',
-    //   name: 'S-Corp Consultation',
-    //   description: 'For multi-owner practices',
-    // },
   };
+
+  const ROUTE_DESTINATIONS = {
+    success: '/thank-you/success',
+    schedule: '/thank-you/schedule',
+  };
+
+  const MULTI_PRACTICE_FIELDS = [
+    'do_you_file_taxes_as_an_independent_contractor_or_as_the_sole_owner_of_your_business_',
+    'does_your_practice_have_multiple_owners',
+  ];
+
+  const INCOME_THRESHOLD_FIELDS = [
+    'is_your_2025_expected_annual_revenue_over__25_000_',
+  ];
+
+  const YES_VALUES = ['yes', 'true', 'y', '1', 'multiple owners', 'multi'];
+  const NO_VALUES = [
+    'no',
+    'false',
+    'n',
+    '0',
+    'less than 25000',
+    'less than 25,000',
+    'less than $25,000',
+    'under 25k',
+    'under $25,000',
+    'under 25000',
+    'no - less than $25,000',
+  ];
+
+  function normalizeResponse(value) {
+    if (value == null) return '';
+    return String(value).trim().toLowerCase();
+  }
+
+  function isAffirmative(value) {
+    const normalized = normalizeResponse(value);
+    if (!normalized) return false;
+    if (YES_VALUES.includes(normalized)) return true;
+
+    return (
+      normalized.startsWith('yes') ||
+      normalized.includes('multiple owners') ||
+      normalized.includes('multi practice') ||
+      normalized.includes('multi-owner') ||
+      normalized.includes('multi owner') ||
+      normalized.includes('multi-practice')
+    );
+  }
+
+  function isNegative(value) {
+    const normalized = normalizeResponse(value);
+    if (!normalized) return false;
+    if (NO_VALUES.includes(normalized)) return true;
+
+    return (
+      normalized.startsWith('no') ||
+      normalized.includes('less than') ||
+      normalized.includes('under 25') ||
+      normalized.includes('under $25') ||
+      normalized.includes('under25')
+    );
+  }
+
+  function findFirstValue(formData, fieldNames) {
+    if (!formData) return null;
+
+    for (const fieldName of fieldNames) {
+      if (formData[fieldName]) {
+        return formData[fieldName];
+      }
+
+      const prefixedCandidates = [
+        `0-1/${fieldName}`,
+        `0-2/${fieldName}`,
+        `0-3/${fieldName}`,
+      ];
+
+      for (const candidate of prefixedCandidates) {
+        if (formData[candidate]) {
+          return formData[candidate];
+        }
+      }
+    }
+
+    return null;
+  }
 
   // Debug logging
   const DEBUG =
@@ -194,55 +276,18 @@
 
   /**
    * Determine scheduler type based on form data
+   * Currently all submissions route to the general scheduler
    */
   function determineSchedulerType(formData) {
-    log('Determining scheduler type from form data:', formData);
-
-    // Look for the "multiple owners" field with various possible names
-    const multipleOwnersFields = [
-      'is_your_practice_a_c_corp_or_our_does_it_have_multiple_owners_',
-      'does_your_practice_have_multiple_owners',
-      'multiple_owners',
-      'practice_multiple_owners',
-      'has_multiple_owners',
-    ];
-
-    let multipleOwners = null;
-
-    // Check each possible field name
-    for (const fieldName of multipleOwnersFields) {
-      if (formData[fieldName]) {
-        multipleOwners = formData[fieldName];
-        log(`Found multiple owners field: ${fieldName} = ${multipleOwners}`);
-        break;
-      }
-    }
-
-    if (!multipleOwners) {
-      log('No multiple owners field found, using default');
-      return 'default';
-    }
-
-    // Normalize the value
-    const normalizedValue = multipleOwners.toString().toLowerCase().trim();
-
-    if (normalizedValue === 'no' || normalizedValue === 'false') {
-      log('Single owner detected -> sole_prop');
-      return 'sole_prop';
-    } else if (normalizedValue === 'yes' || normalizedValue === 'true') {
-      log('Multiple owners detected -> s_corp');
-      return 's_corp';
-    }
-
-    log('Unclear response, using default');
-    return 'default';
+    log('Routing submission to general scheduler', formData);
+    return 'general';
   }
 
   /**
    * Build scheduler URL with pre-filled data
    */
   function buildSchedulerUrl(schedulerType, formData) {
-    const config = SCHEDULER_CONFIG[schedulerType] || SCHEDULER_CONFIG.default;
+    const config = SCHEDULER_CONFIG[schedulerType] || SCHEDULER_CONFIG.general;
     const url = new URL(config.url);
 
     // Always add embed parameter
