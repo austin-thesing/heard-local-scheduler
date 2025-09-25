@@ -371,7 +371,7 @@
     }
 
     // Redirect to target scheduler page with minimal query string
-    const redirectUrl = `${ROUTE_DESTINATIONS.success}${params.toString() ? '?' + params.toString() : ''}`;
+    const redirectUrl = `${ROUTE_DESTINATIONS.schedule}${params.toString() ? '?' + params.toString() : ''}`;
     log('Redirecting to:', redirectUrl);
     window.location.href = redirectUrl;
   }
