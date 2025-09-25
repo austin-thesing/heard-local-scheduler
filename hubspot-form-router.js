@@ -449,7 +449,12 @@
       // Redirect to success page for soft rejections
       const redirectUrl = `${ROUTE_DESTINATIONS.success}${params.toString() ? '?' + params.toString() : ''}`;
       log('Redirecting to success page for soft rejection:', redirectUrl);
-      window.location.href = redirectUrl;
+      try {
+        window.location.replace(redirectUrl);
+      } catch (e) {
+        log('replace() failed, using href for success redirect', e);
+        window.location.href = redirectUrl;
+      }
       return;
     }
 
@@ -492,7 +497,12 @@
     // Redirect to target scheduler page with minimal query string
     const redirectUrl = `${ROUTE_DESTINATIONS.schedule}${params.toString() ? '?' + params.toString() : ''}`;
     log('Redirecting to:', redirectUrl);
-    window.location.href = redirectUrl;
+    try {
+      window.location.replace(redirectUrl);
+    } catch (e) {
+      log('replace() failed, using href for scheduler redirect', e);
+      window.location.href = redirectUrl;
+    }
   }
 
   /**
@@ -807,6 +817,25 @@
     }
   }
 
+  function hasRoutingData(formData) {
+    if (!formData) return false;
+
+    const hasMultiPractice = !!findFirstValue(formData, MULTI_PRACTICE_FIELDS);
+    const hasIncome = !!findFirstValue(formData, INCOME_THRESHOLD_FIELDS);
+
+    const hasBasicIdentity = Boolean(
+      formData.email ||
+        formData.firstname ||
+        formData.first_name ||
+        formData.lastname ||
+        formData.last_name ||
+        formData.company ||
+        formData.practice_name
+    );
+
+    return hasBasicIdentity || hasMultiPractice || hasIncome;
+  }
+
   /**
    * PostMessage event listener for HubSpot form submissions
    */
@@ -857,11 +886,33 @@
         msgType === 'hsFormCallback' &&
         (eventName === 'onFormSubmitted' || eventName === 'onFormSubmit')
       ) {
-        const submissionData = payload.data;
-        if (submissionData) {
-          const normalized = normalizeFormData(submissionData);
-          handleFormSubmission(normalized, options);
+        const submissionData =
+          payload && payload.data ? normalizeFormData(payload.data) : {};
+        const capturedData =
+          window._capturedFormData &&
+          typeof window._capturedFormData === 'object'
+            ? window._capturedFormData
+            : {};
+        const mergedData = { ...capturedData, ...submissionData };
+
+        if (!hasRoutingData(mergedData)) {
+          if (eventName === 'onFormSubmit') {
+            log(
+              'onFormSubmit received without routing fields; waiting for onFormSubmitted event'
+            );
+          } else {
+            log('Submission payload lacks routing data; skipping redirect');
+          }
+          return;
         }
+
+        try {
+          window._capturedFormData = { ...mergedData };
+        } catch (e) {
+          log('Failed to persist merged submission data globally:', e);
+        }
+
+        handleFormSubmission(mergedData, options);
       }
       // Check for developer embed submission (accepted: true)
       else if (payload && payload.formGuid && payload.accepted === true) {
