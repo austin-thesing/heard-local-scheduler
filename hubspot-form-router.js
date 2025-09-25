@@ -115,8 +115,12 @@
   }
 
   const PARTNERSTACK_FIELD_NAME = 'partnerstack_click_id';
-  const PARTNERSTACK_STORAGE_KEYS = [PARTNERSTACK_FIELD_NAME, 'ps_xid'];
-  const PARTNERSTACK_COOKIE_KEY = 'ps_xid';
+  const PARTNERSTACK_STORAGE_KEYS = [
+    PARTNERSTACK_FIELD_NAME,
+    'ps_xid',
+    'psx_id',
+  ];
+  const PARTNERSTACK_COOKIE_KEYS = ['ps_xid', 'psx_id'];
 
   function getCookieValue(name) {
     try {
@@ -182,9 +186,11 @@
   function getPartnerstackClickId() {
     const candidates = [];
 
-    const cookieId = getCookieValue(PARTNERSTACK_COOKIE_KEY);
-    if (cookieId) {
-      candidates.push(cookieId);
+    for (const key of PARTNERSTACK_COOKIE_KEYS) {
+      const cookieId = getCookieValue(key);
+      if (cookieId) {
+        candidates.push(cookieId);
+      }
     }
 
     try {
@@ -624,7 +630,7 @@
 
     // Monitor form inputs using MutationObserver
     function monitorFormInputs() {
-      const partnerstackCookieId = getCookieValue(PARTNERSTACK_COOKIE_KEY);
+      const partnerstackCookieId = getPartnerstackClickId();
       if (partnerstackCookieId) {
         populatePartnerstackFields(partnerstackCookieId);
       }
