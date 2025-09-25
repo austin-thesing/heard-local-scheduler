@@ -201,20 +201,17 @@
   // Fire lead tracking events
   function fireLeadEvents() {
     try {
-      // Facebook Pixel
-      if (typeof fbq !== 'undefined') {
-        fbq('track', 'Lead', {
-          content_category: 'consultation',
-          content_name: 'round_robin_consultation',
-        });
-      }
+      // Only run if we're on the live production domain
+      if (window.location.hostname.includes('joinheard.com')) {
+        // Reddit Pixel - Lead Event
+        if (typeof rdt === 'function') {
+          rdt('track', 'Lead');
+        }
 
-      // Reddit Pixel
-      if (typeof rdt !== 'undefined') {
-        rdt('track', 'Lead', {
-          customEventName: 'ConsultationScheduler',
-          schedulerType: 'round_robin',
-        });
+        // Meta (Facebook) Pixel - Lead Event
+        if (typeof fbq === 'function') {
+          fbq('track', 'Lead');
+        }
       }
 
       // Google Analytics
