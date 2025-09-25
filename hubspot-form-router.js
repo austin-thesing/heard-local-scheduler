@@ -116,9 +116,76 @@
 
   const PARTNERSTACK_FIELD_NAME = 'partnerstack_click_id';
   const PARTNERSTACK_STORAGE_KEYS = [PARTNERSTACK_FIELD_NAME, 'ps_xid'];
+  const PARTNERSTACK_COOKIE_KEY = 'ps_xid';
+
+  function getCookieValue(name) {
+    try {
+      if (!document.cookie) return null;
+
+      const cookies = document.cookie.split(';');
+      for (const rawCookie of cookies) {
+        const cookie = rawCookie.trim();
+        if (!cookie) continue;
+        if (cookie.startsWith(`${name}=`)) {
+          const [, value] = cookie.split('=');
+          if (value) {
+            return decodeURIComponent(value);
+          }
+        }
+      }
+    } catch (e) {
+      log(`cookie access error for ${name}:`, e);
+    }
+    return null;
+  }
+
+  function populatePartnerstackFields(partnerstackId) {
+    if (!partnerstackId) return;
+
+    const selectorParts = PARTNERSTACK_STORAGE_KEYS.flatMap((key) => [
+      `input[name="${key}"]`,
+      `input[name$="/${key}"]`,
+    ]);
+
+    if (selectorParts.length === 0) return;
+
+    let inputs;
+    try {
+      inputs = document.querySelectorAll(selectorParts.join(', '));
+    } catch (e) {
+      log('Failed to query partnerstack inputs:', e);
+      return;
+    }
+
+    if (!inputs || inputs.length === 0) return;
+
+    window._capturedFormData = window._capturedFormData || {};
+
+    inputs.forEach((input) => {
+      if (!input || typeof input.name !== 'string') return;
+
+      if (!input.value) {
+        input.value = partnerstackId;
+      }
+
+      window._capturedFormData[input.name] = input.value;
+
+      const canonicalName = canonicalKey(input.name);
+      if (canonicalName && canonicalName !== input.name) {
+        window._capturedFormData[canonicalName] = input.value;
+      }
+
+      log('Prefilled partnerstack id field:', input.name, '=', input.value);
+    });
+  }
 
   function getPartnerstackClickId() {
     const candidates = [];
+
+    const cookieId = getCookieValue(PARTNERSTACK_COOKIE_KEY);
+    if (cookieId) {
+      candidates.push(cookieId);
+    }
 
     try {
       if (window.partnerstack && window.partnerstack.ps_xid) {
@@ -158,24 +225,9 @@
       log('sessionStorage access error for partnerstack id:', e);
     }
 
-    try {
-      const cookies = document.cookie
-        .split(';')
-        .map((cookie) => cookie.trim())
-        .filter(Boolean);
-
-      PARTNERSTACK_STORAGE_KEYS.forEach((key) => {
-        const cookieValue = cookies.find((cookie) =>
-          cookie.startsWith(`${key}=`)
-        );
-        if (!cookieValue) return;
-        const [, value] = cookieValue.split('=');
-        if (value) {
-          candidates.push(decodeURIComponent(value));
-        }
-      });
-    } catch (e) {
-      log('cookie access error for partnerstack id:', e);
+    const partnerstackCookie = getCookieValue(PARTNERSTACK_FIELD_NAME);
+    if (partnerstackCookie && !candidates.includes(partnerstackCookie)) {
+      candidates.push(partnerstackCookie);
     }
 
     const resolved = candidates.find(
@@ -572,6 +624,11 @@
 
     // Monitor form inputs using MutationObserver
     function monitorFormInputs() {
+      const partnerstackCookieId = getCookieValue(PARTNERSTACK_COOKIE_KEY);
+      if (partnerstackCookieId) {
+        populatePartnerstackFields(partnerstackCookieId);
+      }
+
       const observer = new MutationObserver((mutations) => {
         // Process only new nodes, not all inputs every time
         const addedNodes = [];
@@ -647,6 +704,16 @@
           // Capture initial value
           if (input.value) {
             captureValue(input, 'initial');
+          } else {
+            const partnerstackId = getPartnerstackClickId();
+            if (
+              partnerstackId &&
+              (input.name === PARTNERSTACK_FIELD_NAME ||
+                canonicalKey(input.name) === PARTNERSTACK_FIELD_NAME)
+            ) {
+              input.value = partnerstackId;
+              captureValue(input, 'partnerstack_prefill_hidden');
+            }
           }
         }
         // For radio buttons
