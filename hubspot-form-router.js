@@ -276,9 +276,32 @@
 
   /**
    * Determine scheduler type based on form data
-   * Currently all submissions route to the general scheduler
+   * Routes to 'success' for soft rejections, 'general' for scheduler
    */
   function determineSchedulerType(formData) {
+    // Check multi-practice questions
+    const multiPracticeResponse = findFirstValue(
+      formData,
+      MULTI_PRACTICE_FIELDS
+    );
+    if (multiPracticeResponse && isNegative(multiPracticeResponse)) {
+      log('Multi-practice question answered "no", routing to success page', {
+        field: MULTI_PRACTICE_FIELDS.find((field) => formData[field]),
+        value: multiPracticeResponse,
+      });
+      return 'success';
+    }
+
+    // Check income threshold questions
+    const incomeResponse = findFirstValue(formData, INCOME_THRESHOLD_FIELDS);
+    if (incomeResponse && isNegative(incomeResponse)) {
+      log('Income threshold question answered "no", routing to success page', {
+        field: INCOME_THRESHOLD_FIELDS.find((field) => formData[field]),
+        value: incomeResponse,
+      });
+      return 'success';
+    }
+
     log('Routing submission to general scheduler', formData);
     return 'general';
   }
@@ -331,10 +354,25 @@
   }
 
   /**
-   * Redirect to scheduler display page
+   * Redirect to appropriate destination (scheduler or success page)
    */
   function redirectToScheduler(formData, schedulerType) {
-    // Store sensitive data in sessionStorage
+    // Handle success/soft rejection routing
+    if (schedulerType === 'success') {
+      // Build minimal URL with only email visible
+      const params = new URLSearchParams();
+      if (formData.email) {
+        params.set('email', formData.email);
+      }
+
+      // Redirect to success page for soft rejections
+      const redirectUrl = `${ROUTE_DESTINATIONS.success}${params.toString() ? '?' + params.toString() : ''}`;
+      log('Redirecting to success page for soft rejection:', redirectUrl);
+      window.location.href = redirectUrl;
+      return;
+    }
+
+    // Store sensitive data in sessionStorage for scheduler routing
     const routerData = {
       scheduler_type: schedulerType,
       formData: formData,
