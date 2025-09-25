@@ -604,6 +604,18 @@
         if (canonicalFieldKey && canonicalFieldKey !== fieldKey) {
           window._capturedFormData[`${canonicalFieldKey}_raw`] = rawValue;
         }
+
+        // Capture text stored in hidden mirror field when available
+        const hiddenMirror = document.querySelector(
+          `input[type="hidden"][name="${fieldKey}"]`
+        );
+        if (hiddenMirror && hiddenMirror.value) {
+          window._capturedFormData[fieldKey] = hiddenMirror.value;
+          if (canonicalFieldKey && canonicalFieldKey !== fieldKey) {
+            window._capturedFormData[canonicalFieldKey] = hiddenMirror.value;
+          }
+          value = hiddenMirror.value;
+        }
       }
 
       // Only log if there's an actual value
