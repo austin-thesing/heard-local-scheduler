@@ -159,16 +159,21 @@
     }
 
     try {
-      const cookieValue = document.cookie
+      const cookies = document.cookie
         .split(';')
         .map((cookie) => cookie.trim())
-        .find((cookie) => cookie.startsWith(`${PARTNERSTACK_FIELD_NAME}=`));
-      if (cookieValue) {
+        .filter(Boolean);
+
+      PARTNERSTACK_STORAGE_KEYS.forEach((key) => {
+        const cookieValue = cookies.find((cookie) =>
+          cookie.startsWith(`${key}=`)
+        );
+        if (!cookieValue) return;
         const [, value] = cookieValue.split('=');
         if (value) {
           candidates.push(decodeURIComponent(value));
         }
-      }
+      });
     } catch (e) {
       log('cookie access error for partnerstack id:', e);
     }
@@ -500,6 +505,7 @@
 
       let value = input.value;
       const fieldKey = input.name;
+      const canonicalFieldKey = canonicalKey(fieldKey);
 
       // Check if value actually changed
       if (previousValues[fieldKey] === value) {
@@ -518,6 +524,9 @@
 
       // Store the value
       window._capturedFormData[fieldKey] = value;
+      if (canonicalFieldKey && canonicalFieldKey !== fieldKey) {
+        window._capturedFormData[canonicalFieldKey] = value;
+      }
 
       // Only log if there's an actual value
       if (value) {
@@ -606,7 +615,13 @@
         // Skip readonly inputs UNLESS they're hidden
         if (input.readOnly && input.type !== 'hidden') return;
 
-        if (input.name === PARTNERSTACK_FIELD_NAME && !input.value) {
+        const inputCanonicalName = input.name ? canonicalKey(input.name) : '';
+
+        if (
+          (input.name === PARTNERSTACK_FIELD_NAME ||
+            inputCanonicalName === PARTNERSTACK_FIELD_NAME) &&
+          !input.value
+        ) {
           const partnerstackId = getPartnerstackClickId();
           if (partnerstackId) {
             input.value = partnerstackId;
