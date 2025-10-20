@@ -26,24 +26,8 @@
     'does_your_practice_have_multiple_owners',
   ];
 
-  const INCOME_THRESHOLD_FIELDS = [
-    'is_your_2025_expected_annual_revenue_over__25_000_',
-  ];
-
   const YES_VALUES = ['yes', 'true', 'y', '1', 'multiple owners', 'multi'];
-  const NO_VALUES = [
-    'no',
-    'false',
-    'n',
-    '0',
-    'less than 25000',
-    'less than 25,000',
-    'less than $25,000',
-    'under 25k',
-    'under $25,000',
-    'under 25000',
-    'no - less than $25,000',
-  ];
+  const NO_VALUES = ['no', 'false', 'n', '0'];
 
   function normalizeResponse(value) {
     if (value == null) return '';
@@ -70,13 +54,7 @@
     if (!normalized) return false;
     if (NO_VALUES.includes(normalized)) return true;
 
-    return (
-      normalized.startsWith('no') ||
-      normalized.includes('less than') ||
-      normalized.includes('under 25') ||
-      normalized.includes('under $25') ||
-      normalized.includes('under25')
-    );
+    return normalized.startsWith('no');
   }
 
   function findFirstValue(formData, fieldNames) {
@@ -339,7 +317,7 @@
 
   /**
    * Determine scheduler type based on form data
-   * Routes to 'success' if NO to either question, 'general' if YES to both
+   * Routes to 'success' if NO to multi-practice question, 'general' if YES
    */
   function determineSchedulerType(formData) {
     // Check multi-practice questions
@@ -350,11 +328,7 @@
     const hasMultiPracticeYes =
       multiPracticeResponse && isAffirmative(multiPracticeResponse);
 
-    // Check income threshold questions
-    const incomeResponse = findFirstValue(formData, INCOME_THRESHOLD_FIELDS);
-    const hasIncomeYes = incomeResponse && isAffirmative(incomeResponse);
-
-    // Route to success if either question is answered "no" or not answered
+    // Route to success if multi-practice question is answered "no" or not answered
     if (!hasMultiPracticeYes) {
       log('Multi-practice question not answered yes, routing to success page', {
         field: MULTI_PRACTICE_FIELDS.find((field) => formData[field]),
@@ -364,26 +338,10 @@
       return 'success';
     }
 
-    if (!hasIncomeYes) {
-      log(
-        'Income threshold question not answered yes, routing to success page',
-        {
-          field: INCOME_THRESHOLD_FIELDS.find((field) => formData[field]),
-          value: incomeResponse,
-          hasYes: hasIncomeYes,
-        }
-      );
-      return 'success';
-    }
-
-    // Only route to scheduler if BOTH questions are answered "yes"
-    log(
-      'Both income and multi-practice questions answered yes, routing to scheduler',
-      {
-        multiPracticeValue: multiPracticeResponse,
-        incomeValue: incomeResponse,
-      }
-    );
+    // Route to scheduler if multi-practice question is answered "yes"
+    log('Multi-practice question answered yes, routing to scheduler', {
+      multiPracticeValue: multiPracticeResponse,
+    });
     return 'general';
   }
 
