@@ -135,18 +135,31 @@
     let inputs;
     try {
       inputs = document.querySelectorAll(selectorParts.join(', '));
+      log(
+        'PartnerStack selector found',
+        inputs.length,
+        'inputs:',
+        selectorParts.join(', ')
+      );
     } catch (e) {
       log('Failed to query partnerstack inputs:', e);
       return;
     }
 
-    if (!inputs || inputs.length === 0) return;
+    if (!inputs || inputs.length === 0) {
+      log(
+        'No PartnerStack inputs found with selectors:',
+        selectorParts.join(', ')
+      );
+      return;
+    }
 
     window._capturedFormData = window._capturedFormData || {};
 
     inputs.forEach((input) => {
       if (!input || typeof input.name !== 'string') return;
 
+      const originalValue = input.value;
       if (!input.value) {
         input.value = partnerstackId;
       }
@@ -158,7 +171,13 @@
         window._capturedFormData[canonicalName] = input.value;
       }
 
-      log('Prefilled partnerstack id field:', input.name, '=', input.value);
+      log(
+        'Prefilled partnerstack id field:',
+        input.name,
+        '=',
+        input.value,
+        originalValue ? `(overwrote: ${originalValue})` : '(was empty)'
+      );
     });
   }
 
@@ -690,12 +709,12 @@
         const inputCanonicalName = input.name ? canonicalKey(input.name) : '';
 
         if (
-          (input.name === PARTNERSTACK_FIELD_NAME ||
-            inputCanonicalName === PARTNERSTACK_FIELD_NAME) &&
-          !input.value
+          input.name === PARTNERSTACK_FIELD_NAME ||
+          inputCanonicalName === PARTNERSTACK_FIELD_NAME ||
+          input.name.endsWith('/' + PARTNERSTACK_FIELD_NAME)
         ) {
           const partnerstackId = getPartnerstackClickId();
-          if (partnerstackId) {
+          if (partnerstackId && !input.value) {
             input.value = partnerstackId;
             captureValue(input, 'partnerstack_prefill');
           }
@@ -724,7 +743,8 @@
             if (
               partnerstackId &&
               (input.name === PARTNERSTACK_FIELD_NAME ||
-                canonicalKey(input.name) === PARTNERSTACK_FIELD_NAME)
+                canonicalKey(input.name) === PARTNERSTACK_FIELD_NAME ||
+                input.name.endsWith('/' + PARTNERSTACK_FIELD_NAME))
             ) {
               input.value = partnerstackId;
               captureValue(input, 'partnerstack_prefill_hidden');
