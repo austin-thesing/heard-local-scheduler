@@ -188,41 +188,143 @@ function injectPartnerStackId() {
   }
 }
 
+// For HubSpot developer embeds, use the global callback
+function setupDeveloperEmbedHandler() {
+  console.log('[PartnerStack] Setting up developer embed handler');
+  
+  // Create a global callback that HubSpot will call
+  window.onHubSpotFormReady = function(form) {
+    console.log('[PartnerStack] HubSpot form ready via developer embed');
+    
+    // Inject the PartnerStack ID
+    const psXid = getPartnerStackId();
+    if (psXid) {
+      // Find the hidden field in the form
+      const iframe = document.querySelector('iframe.hs-form-iframe');
+      if (iframe) {
+        try {
+          // Send message to iframe to set the field value
+          iframe.contentWindow.postMessage({
+            type: 'hsFormCallback',
+            eventName: 'setFieldValue', 
+            fieldName: 'partnerstack_click_id',
+            fieldValue: psXid
+          }, '*');
+          console.log('[PartnerStack] Sent message to iframe to set field value');
+        } catch (e) {
+          console.log('[PartnerStack] Could not post message to iframe:', e);
+        }
+      }
+    }
+  };
+  
+  // Override the hbspt.forms.create to intercept form creation
+  if (window.hbspt && window.hbspt.forms && window.hbspt.forms.create) {
+    const originalCreate = window.hbspt.forms.create;
+    window.hbspt.forms.create = function(options) {
+      console.log('[PartnerStack] Intercepting HubSpot form creation');
+      
+      // Store the original callbacks
+      const originalOnFormReady = options.onFormReady;
+      const originalOnFormSubmit = options.onFormSubmit;
+      const originalOnFormSubmitted = options.onFormSubmitted;
+      
+      // Override onFormReady to inject PartnerStack ID
+      options.onFormReady = function($form) {
+        console.log('[PartnerStack] Form ready - injecting PartnerStack ID');
+        
+        const psXid = getPartnerStackId();
+        if (psXid) {
+          // Try to set the value using HubSpot's API
+          if ($form && $form.find) {
+            const field = $form.find('input[name="partnerstack_click_id"]');
+            if (field.length) {
+              field.val(psXid).change();
+              console.log('[PartnerStack] Set field value via jQuery');
+            }
+          }
+        }
+        
+        // Call original callback if it exists
+        if (originalOnFormReady) {
+          originalOnFormReady.apply(this, arguments);
+        }
+      };
+      
+      // Override onFormSubmit to ensure PartnerStack ID is included
+      options.onFormSubmit = function($form) {
+        console.log('[PartnerStack] Form submitting - ensuring PartnerStack ID');
+        
+        const psXid = getPartnerStackId();
+        if (psXid) {
+          // Store it globally for the XHR interceptor
+          window._forcePartnerStackId = psXid;
+          
+          // Try to inject it one more time
+          if ($form && $form.find) {
+            const field = $form.find('input[name="partnerstack_click_id"]');
+            if (field.length) {
+              field.val(psXid).change();
+              console.log('[PartnerStack] Re-injected field value on submit');
+            }
+          }
+        }
+        
+        // Call original callback if it exists
+        if (originalOnFormSubmit) {
+          return originalOnFormSubmit.apply(this, arguments);
+        }
+      };
+      
+      // Call the original create with our modified options
+      return originalCreate.call(this, options);
+    };
+    console.log('[PartnerStack] HubSpot form create hook installed');
+  }
+}
+
 // For HubSpot developer embeds, listen for form ready events
 function setupHubSpotListener() {
   console.log('[PartnerStack] setupHubSpotListener called');
+  
+  // Set up developer embed handler
+  setupDeveloperEmbedHandler();
   
   // Hook into XMLHttpRequest to intercept HubSpot form submissions
   const originalXHRSend = XMLHttpRequest.prototype.send;
   XMLHttpRequest.prototype.send = function(data) {
     // Check if this is a HubSpot form submission
     if (this._url && (this._url.includes('forms.hubspot.com') || this._url.includes('hsforms.com'))) {
-      console.log('[PartnerStack] Intercepted HubSpot form submission to:', this._url);
+      console.log('[PartnerStack] 🎯 INTERCEPTED HubSpot form submission to:', this._url);
       // Use forced ID if available (set by router), otherwise get from storage
       const psXid = window._forcePartnerStackId || window._persistentPartnerStackId || getPartnerStackId();
       
       if (psXid && data) {
-        console.log('[PartnerStack] Original submission data:', data);
+        console.log('[PartnerStack] PartnerStack ID to inject:', psXid);
+        console.log('[PartnerStack] Original data length:', data.length);
+        
         try {
           // Try to parse and modify the submission data
           if (typeof data === 'string') {
             // URL encoded form data
             if (data.includes('&')) {
               // Check if partnerstack_click_id is already in the data
-              if (!data.includes('partnerstack_click_id=')) {
+              if (!data.includes('partnerstack_click_id')) {
                 data += '&partnerstack_click_id=' + encodeURIComponent(psXid);
-                console.log('[PartnerStack] Added PartnerStack ID to URL-encoded submission');
-                console.log('[PartnerStack] Modified data now includes: partnerstack_click_id=' + psXid);
-              } else if (data.includes('partnerstack_click_id=&') || data.endsWith('partnerstack_click_id=')) {
+                console.log('[PartnerStack] ✅ Added PartnerStack ID to URL-encoded submission');
+              } else if (data.match(/partnerstack_click_id=(?:&|$)/)) {
                 // Field exists but is empty, replace it
-                data = data.replace(/partnerstack_click_id=[^&]*/, 'partnerstack_click_id=' + encodeURIComponent(psXid));
-                console.log('[PartnerStack] Replaced empty PartnerStack ID in submission');
-                console.log('[PartnerStack] Modified data now includes: partnerstack_click_id=' + psXid);
+                data = data.replace(/partnerstack_click_id=(?:&|$)/, 'partnerstack_click_id=' + encodeURIComponent(psXid) + '&');
+                console.log('[PartnerStack] ✅ Replaced empty PartnerStack ID in submission');
               } else {
                 // Field exists with a value, check if it's correct
                 const match = data.match(/partnerstack_click_id=([^&]*)/);
-                if (match && match[1]) {
-                  console.log('[PartnerStack] PartnerStack ID already in submission:', decodeURIComponent(match[1]));
+                if (match && match[1] && decodeURIComponent(match[1]) !== psXid) {
+                  // Wrong value, replace it
+                  data = data.replace(/partnerstack_click_id=[^&]*/, 'partnerstack_click_id=' + encodeURIComponent(psXid));
+                  console.log('[PartnerStack] ✅ Replaced incorrect PartnerStack ID');
+                } else if (match && match[1]) {
+                  console.log('[PartnerStack] ✅ PartnerStack ID already correct in submission:', decodeURIComponent(match[1]));
                 }
               }
             }
@@ -339,6 +441,11 @@ function setupHubSpotListener() {
   // Listen for postMessage events from HubSpot forms
   window.addEventListener('message', function (event) {
     try {
+      // Check if this is from HubSpot
+      if (event.origin && (event.origin.includes('hubspot') || event.origin.includes('hsforms'))) {
+        console.log('[PartnerStack] Message from HubSpot:', event.data);
+      }
+      
       if (event.data && event.data.type === 'hsFormCallback') {
         const payload = event.data;
         const eventName = payload.eventName;
@@ -350,12 +457,33 @@ function setupHubSpotListener() {
         // Inject PartnerStack ID when form is ready
         if (eventName === 'onFormReady') {
           console.log(
-            '[PartnerStack] Form ready event detected, scheduling injection in 100ms'
+            '[PartnerStack] Form ready event detected'
           );
-          // Small delay to ensure form is fully rendered
+          // Inject immediately and multiple times
+          injectPartnerStackId();
           setTimeout(injectPartnerStackId, 100);
-          // Also inject again after a longer delay to ensure it's captured
           setTimeout(injectPartnerStackId, 500);
+          setTimeout(injectPartnerStackId, 1000);
+        }
+        
+        // Also handle form submit event
+        if (eventName === 'onFormSubmit') {
+          console.log('[PartnerStack] Form submit detected via postMessage');
+          const psXid = getPartnerStackId();
+          if (psXid) {
+            window._forcePartnerStackId = psXid;
+            // Try to modify the payload data if possible
+            if (payload.data && payload.data.fields) {
+              const psField = payload.data.fields.find(f => f.name === 'partnerstack_click_id');
+              if (psField) {
+                psField.value = psXid;
+                console.log('[PartnerStack] Modified field in postMessage payload');
+              } else {
+                payload.data.fields.push({name: 'partnerstack_click_id', value: psXid});
+                console.log('[PartnerStack] Added field to postMessage payload');
+              }
+            }
+          }
         }
       }
     } catch (e) {
@@ -400,56 +528,15 @@ function init() {
 function setupFormSubmitInterceptor() {
   console.log('[PartnerStack] Setting up form submit interceptor');
   
-  // Monitor for form submit events using capture phase
+  // Simple submit handler - just ensure the value is available for XHR interceptor
   document.addEventListener('submit', function(e) {
-    // Check if we've already processed this form submission
-    if (e.target.dataset.partnerStackProcessed === 'true') {
-      console.log('[PartnerStack] Form already processed, allowing submission');
-      return; // Let it submit normally
-    }
-    
-    console.log('[PartnerStack] Form submit event captured');
     const psXid = getPartnerStackId();
-    
-    // Check if this is a HubSpot form
-    const isHubSpotForm = e.target.querySelector('input[name*="hs_context"]') || 
-                          e.target.classList.contains('hs-form') ||
-                          e.target.id.includes('hsForm');
-    
-    if (psXid && isHubSpotForm) {
-      // Mark form as processed to prevent loop
-      e.target.dataset.partnerStackProcessed = 'true';
-      
-      console.log('[PartnerStack] Injecting PartnerStack ID before submission');
-      
-      // Re-inject the value right before submission
-      const inputs = e.target.querySelectorAll('input[name*="partnerstack"], input[name="ps_xid"]');
-      
-      inputs.forEach(function(input) {
-        if (input.name.includes('partnerstack_click_id') || input.name === 'ps_xid') {
-          console.log('[PartnerStack] Injecting value for field:', input.name, 'with value:', psXid);
-          input.value = psXid;
-          input.setAttribute('value', psXid);
-          
-          // Force the value using native setter
-          try {
-            const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
-            if (descriptor && descriptor.set) {
-              descriptor.set.call(input, psXid);
-            }
-          } catch (err) {
-            console.log('[PartnerStack] Could not use descriptor:', err);
-          }
-        }
-      });
-      
-      // Store globally for XHR interceptor
+    if (psXid) {
+      // Store globally for XHR interceptor to use
       window._forcePartnerStackId = psXid;
-      
-      // Don't prevent submission, just let it continue with our injected value
-      console.log('[PartnerStack] Allowing form submission with injected PartnerStack ID');
+      console.log('[PartnerStack] Form submitted, PartnerStack ID ready for interception:', psXid);
     }
-  }, true); // Use capture phase to run before HubSpot's handlers
+  }, true); // Use capture phase
   
   // Also monitor for click events on submit buttons
   document.addEventListener('click', function(e) {
