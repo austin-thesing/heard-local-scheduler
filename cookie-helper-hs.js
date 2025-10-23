@@ -198,7 +198,8 @@ function setupHubSpotListener() {
     // Check if this is a HubSpot form submission
     if (this._url && (this._url.includes('forms.hubspot.com') || this._url.includes('hsforms.com'))) {
       console.log('[PartnerStack] Intercepted HubSpot form submission to:', this._url);
-      const psXid = getPartnerStackId();
+      // Use forced ID if available (set by router), otherwise get from storage
+      const psXid = window._forcePartnerStackId || window._persistentPartnerStackId || getPartnerStackId();
       
       if (psXid && data) {
         console.log('[PartnerStack] Original submission data:', data);
@@ -403,27 +404,62 @@ function setupFormSubmitInterceptor() {
   document.addEventListener('submit', function(e) {
     console.log('[PartnerStack] Form submit event captured');
     const psXid = getPartnerStackId();
-    if (psXid) {
+    
+    // Check if this is a HubSpot form
+    const isHubSpotForm = e.target.querySelector('input[name*="hs_context"]') || 
+                          e.target.classList.contains('hs-form') ||
+                          e.target.id.includes('hsForm');
+    
+    if (psXid && isHubSpotForm) {
+      // Prevent default submission briefly
+      e.preventDefault();
+      e.stopPropagation();
+      
+      console.log('[PartnerStack] Delaying HubSpot form submission to inject PartnerStack ID');
+      
       // Re-inject the value right before submission
       const inputs = e.target.querySelectorAll('input[name*="partnerstack"], input[name="ps_xid"]');
+      let injected = false;
+      
       inputs.forEach(function(input) {
         if (input.name.includes('partnerstack_click_id') || input.name === 'ps_xid') {
-          console.log('[PartnerStack] Re-injecting value on submit for field:', input.name);
+          console.log('[PartnerStack] Force-injecting value for field:', input.name, 'with value:', psXid);
           input.value = psXid;
           input.setAttribute('value', psXid);
+          injected = true;
           
           // Force the value using defineProperty to make it stick
           try {
-            Object.defineProperty(input, 'value', {
-              get: function() { return psXid; },
-              set: function() { return psXid; },
-              configurable: true
-            });
+            const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+            if (descriptor && descriptor.set) {
+              descriptor.set.call(input, psXid);
+            }
           } catch (err) {
-            console.log('[PartnerStack] Could not define property:', err);
+            console.log('[PartnerStack] Could not use descriptor:', err);
           }
         }
       });
+      
+      // Store globally for XHR interceptor
+      window._forcePartnerStackId = psXid;
+      
+      // Resubmit the form after a small delay
+      setTimeout(function() {
+        console.log('[PartnerStack] Re-submitting form with PartnerStack ID injected');
+        
+        // Try multiple submission methods
+        if (e.target.requestSubmit) {
+          e.target.requestSubmit();
+        } else if (e.target.submit) {
+          e.target.submit();
+        } else {
+          // Trigger submit button click
+          const submitBtn = e.target.querySelector('input[type="submit"], button[type="submit"]');
+          if (submitBtn) submitBtn.click();
+        }
+      }, 100);
+      
+      return false;
     }
   }, true); // Use capture phase to run before HubSpot's handlers
   

@@ -380,12 +380,17 @@
       // Redirect to success page for soft rejections
       const redirectUrl = `${ROUTE_DESTINATIONS.success}${params.toString() ? '?' + params.toString() : ''}`;
       log('Redirecting to success page for soft rejection:', redirectUrl);
-      try {
-        window.location.replace(redirectUrl);
-      } catch (e) {
-        log('replace() failed, using href for success redirect', e);
-        window.location.href = redirectUrl;
-      }
+      
+      // IMPORTANT: Delay redirect to ensure form submission completes
+      setTimeout(() => {
+        log('Executing delayed redirect to:', redirectUrl);
+        try {
+          window.location.replace(redirectUrl);
+        } catch (e) {
+          log('replace() failed, using href for success redirect', e);
+          window.location.href = redirectUrl;
+        }
+      }, 1000); // Wait 1 second to ensure submission completes
       return;
     }
 
@@ -427,13 +432,18 @@
 
     // Redirect to target scheduler page with minimal query string
     const redirectUrl = `${ROUTE_DESTINATIONS.schedule}${params.toString() ? '?' + params.toString() : ''}`;
-    log('Redirecting to:', redirectUrl);
-    try {
-      window.location.replace(redirectUrl);
-    } catch (e) {
-      log('replace() failed, using href for scheduler redirect', e);
-      window.location.href = redirectUrl;
-    }
+    log('Delaying redirect to ensure form submission completes...');
+    
+    // IMPORTANT: Delay redirect to ensure form submission and PartnerStack ID injection complete
+    setTimeout(() => {
+      log('Executing delayed redirect to:', redirectUrl);
+      try {
+        window.location.replace(redirectUrl);
+      } catch (e) {
+        log('replace() failed, using href for scheduler redirect', e);
+        window.location.href = redirectUrl;
+      }
+    }, 1000); // Wait 1 second to ensure submission completes
   }
 
   /**
@@ -456,6 +466,9 @@
       formData['0-3/partnerstack_click_id'] = partnerstackId;
 
       log('Injected PartnerStack ID into submission:', partnerstackId);
+      
+      // Also store globally for the XHR interceptor to use
+      window._forcePartnerStackId = partnerstackId;
 
       try {
         sessionStorage.setItem('ps_xid', partnerstackId);
@@ -468,9 +481,16 @@
       } catch (e) {
         log('Failed to persist partnerstack id in localStorage:', e);
       }
+    } else {
+      log('WARNING: No PartnerStack ID found during form submission!');
     }
 
     const schedulerType = determineSchedulerType(formData);
+    
+    // Add a visual indicator that submission is processing
+    log('Processing form submission, please wait...');
+    
+    // Delay redirect to ensure HubSpot receives the data
     redirectToScheduler(formData, schedulerType);
 
     // Fire analytics events
