@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "scripts": {
-    "build": "rm -rf dist && bun build ps-cookie-setter.js --outfile=dist/ps-cookie-setter.js --minify && bun build hubspot-form-router.js wf-scheduler-injection.js form.css --outdir=dist --minify && bun build form-handler.js --outdir=dist --minify",
+    "build": "rm -rf dist && bun build ps-cookie-setter.js --outfile=dist/ps-cookie-setter.js --minify --format=iife && bun build hubspot-form-router.js wf-scheduler-injection.js form.css --outdir=dist --minify --format=iife && bun build form-handler.js --outdir=dist --minify --format=iife",
     "test": "bun test"
   }
 }
