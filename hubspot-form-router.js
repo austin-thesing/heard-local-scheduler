@@ -204,12 +204,14 @@
     for (const key of PARTNERSTACK_COOKIE_KEYS) {
       const cookieId = getCookieValue(key);
       if (cookieId) {
+        log('Found PartnerStack ID in cookie', key + ':', cookieId);
         candidates.push(cookieId);
       }
     }
 
     try {
       if (window.partnerstack && window.partnerstack.ps_xid) {
+        log('Found PartnerStack ID in window.partnerstack:', window.partnerstack.ps_xid);
         candidates.push(window.partnerstack.ps_xid);
       }
     } catch (e) {
@@ -218,6 +220,7 @@
 
     try {
       if (window.ps_xid) {
+        log('Found PartnerStack ID in window.ps_xid:', window.ps_xid);
         candidates.push(window.ps_xid);
       }
     } catch (e) {
@@ -228,6 +231,7 @@
       PARTNERSTACK_STORAGE_KEYS.forEach((key) => {
         const value = localStorage.getItem(key);
         if (value) {
+          log('Found PartnerStack ID in localStorage', key + ':', value);
           candidates.push(value);
         }
       });
@@ -239,6 +243,7 @@
       PARTNERSTACK_STORAGE_KEYS.forEach((key) => {
         const value = sessionStorage.getItem(key);
         if (value) {
+          log('Found PartnerStack ID in sessionStorage', key + ':', value);
           candidates.push(value);
         }
       });
@@ -248,12 +253,17 @@
 
     const partnerstackCookie = getCookieValue(PARTNERSTACK_FIELD_NAME);
     if (partnerstackCookie && !candidates.includes(partnerstackCookie)) {
+      log('Found PartnerStack ID in partnerstack_click_id cookie:', partnerstackCookie);
       candidates.push(partnerstackCookie);
     }
+
+    log('All PartnerStack ID candidates:', candidates);
 
     const resolved = candidates.find(
       (value) => value && value !== 'undefined' && value !== 'null'
     );
+    
+    log('Resolved PartnerStack ID:', resolved);
     return resolved || null;
   }
 
