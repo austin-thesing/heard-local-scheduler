@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Test ps_xid Auto-Append</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 20px;
+      line-height: 1.6;
+    }
+    .status {
+      background: #f5f5f5;
+      padding: 15px;
+      border-radius: 8px;
+      margin: 20px 0;
+      font-family: monospace;
+    }
+    .success { background: #d4edda; color: #155724; }
+    .warning { background: #fff3cd; color: #856404; }
+    .info { background: #d1ecf1; color: #0c5460; }
+    button {
+      background: #226752;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 5px;
+      cursor: pointer;
+      margin: 5px;
+    }
+    button:hover {
+      background: #1a4d3e;
+    }
+    .test-section {
+      margin: 30px 0;
+      padding: 20px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+    }
+    h2 {
+      color: #226752;
+      margin-top: 0;
+    }
+    .fake-hubspot-form {
+      background: #f9f9f9;
+      padding: 20px;
+      border: 2px dashed #226752;
+      border-radius: 8px;
+      margin: 20px 0;
+    }
+    code {
+      background: #f4f4f4;
+      padding: 2px 6px;
+      border-radius: 3px;
+      color: #d73a49;
+    }
+  </style>
+</head>
+<body>
+  <h1>PartnerStack ps_xid Auto-Append Test</h1>
+  
+  <div class="test-section">
+    <h2>📊 Current Status</h2>
+    <div id="status" class="status info">Checking...</div>
+  </div>
+
+  <div class="test-section">
+    <h2>🧪 Test Controls</h2>
+    <p>Use these buttons to test different scenarios:</p>
+    
+    <button onclick="setTestXid()">Set Test ps_xid (TEST123)</button>
+    <button onclick="clearXid()">Clear All ps_xid</button>
+    <button onclick="simulateHubSpotForm()">Simulate HubSpot Form</button>
+    <button onclick="removeFormSimulation()">Remove Form Simulation</button>
+    <button onclick="refreshStatus()">Refresh Status</button>
+  </div>
+
+  <div class="test-section">
+    <h2>📝 Test Scenarios</h2>
+    <ol>
+      <li>
+        <strong>Test URL Auto-Append on Form Pages:</strong>
+        <ul>
+          <li>Click "Set Test ps_xid" to store a test ID</li>
+          <li>Click "Simulate HubSpot Form" to add form elements</li>
+          <li>The URL should automatically update with <code>?ps_xid=TEST123</code></li>
+        </ul>
+      </li>
+      <li>
+        <strong>Test Persistence:</strong>
+        <ul>
+          <li>Set the test ps_xid</li>
+          <li>Refresh the page</li>
+          <li>The ps_xid should persist in storage</li>
+        </ul>
+      </li>
+      <li>
+        <strong>Test Cleanup:</strong>
+        <ul>
+          <li>Click "Clear All ps_xid"</li>
+          <li>All storage should be cleared</li>
+        </ul>
+      </li>
+    </ol>
+  </div>
+
+  <div id="hubspot-form-container"></div>
+
+  <!-- Include the global cookie script -->
+  <script src="global-cookie.js"></script>
+  
+  <script>
+    // Helper functions for testing
+    function getCookie(name) {
+      var m = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
+      return m ? decodeURIComponent(m[1]) : '';
+    }
+
+    function setCookie(name, value, days) {
+      var expires = '';
+      if (days) {
+        var date = new Date();
+        date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+        expires = '; expires=' + date.toUTCString();
+      }
+      document.cookie = name + '=' + (value || '') + expires + '; path=/';
+    }
+
+    function setTestXid() {
+      const testId = 'TEST123';
+      setCookie('ps_xid', testId, 90);
+      try {
+        localStorage.setItem('ps_xid', testId);
+      } catch (e) {
+        console.error('localStorage error:', e);
+      }
+      refreshStatus();
+      alert('Test ps_xid set to: ' + testId);
+    }
+
+    function clearXid() {
+      // Clear cookie
+      document.cookie = 'ps_xid=; path=/; max-age=0';
+      document.cookie = 'ps_partner_key=; path=/; max-age=0';
+      
+      // Clear localStorage
+      try {
+        localStorage.removeItem('ps_xid');
+        localStorage.removeItem('ps_partner_key');
+        localStorage.removeItem('partnerstack_click_id');
+      } catch (e) {
+        console.error('localStorage error:', e);
+      }
+      
+      // Remove from URL
+      const url = new URL(window.location);
+      url.searchParams.delete('ps_xid');
+      window.history.replaceState(null, '', url.toString());
+      
+      refreshStatus();
+      alert('All ps_xid data cleared');
+    }
+
+    function simulateHubSpotForm() {
+      const container = document.getElementById('hubspot-form-container');
+      container.innerHTML = `
+        <div class="fake-hubspot-form">
+          <h3>🎭 Simulated HubSpot Form</h3>
+          <p>This simulates a HubSpot form being present on the page.</p>
+          <div class="hs-form" id="hsForm_test">
+            <p>Form fields would appear here...</p>
+          </div>
+          <p><em>The global-cookie.js script should detect this and auto-append ps_xid to the URL.</em></p>
+        </div>
+      `;
+      
+      // Trigger the script to re-check for forms
+      setTimeout(function() {
+        // Re-run the global cookie script logic
+        window.location.reload();
+      }, 500);
+    }
+
+    function removeFormSimulation() {
+      document.getElementById('hubspot-form-container').innerHTML = '';
+      refreshStatus();
+    }
+
+    function refreshStatus() {
+      const status = document.getElementById('status');
+      const urlParams = new URLSearchParams(window.location.search);
+      
+      // Get all ps_xid sources
+      const cookieXid = getCookie('ps_xid');
+      let localStorageXid = null;
+      try {
+        localStorageXid = localStorage.getItem('ps_xid');
+      } catch (e) {
+        console.error('localStorage error:', e);
+      }
+      const urlXid = urlParams.get('ps_xid');
+      
+      // Check for HubSpot forms
+      const hasHubSpotForm = !!(
+        document.querySelector('.hs-form, .hbspt-form, [id*="hsForm"], [class*="hubspot"]') ||
+        window.hbspt ||
+        window.HubSpotForms
+      );
+      
+      // Build status HTML
+      let html = '<strong>Current ps_xid Status:</strong><br><br>';
+      
+      html += '🍪 <strong>Cookie:</strong> ' + (cookieXid ? `<code>${cookieXid}</code>` : '<em>Not set</em>') + '<br>';
+      html += '💾 <strong>localStorage:</strong> ' + (localStorageXid ? `<code>${localStorageXid}</code>` : '<em>Not set</em>') + '<br>';
+      html += '🔗 <strong>URL Parameter:</strong> ' + (urlXid ? `<code>${urlXid}</code>` : '<em>Not set</em>') + '<br>';
+      html += '📋 <strong>HubSpot Form Detected:</strong> ' + (hasHubSpotForm ? '✅ Yes' : '❌ No') + '<br>';
+      html += '🌐 <strong>Current URL:</strong> <code>' + window.location.href + '</code><br>';
+      
+      // Determine overall status
+      if (cookieXid || localStorageXid) {
+        if (hasHubSpotForm && !urlXid) {
+          status.className = 'status warning';
+          html += '<br><strong>⚠️ Warning:</strong> ps_xid exists but not in URL (form detected). Try refreshing the page.';
+        } else if (hasHubSpotForm && urlXid) {
+          status.className = 'status success';
+          html += '<br><strong>✅ Success:</strong> ps_xid is properly appended to URL for form tracking!';
+        } else if (!hasHubSpotForm) {
+          status.className = 'status info';
+          html += '<br><strong>ℹ️ Info:</strong> ps_xid stored but no form detected (URL append not triggered).';
+        }
+      } else {
+        status.className = 'status info';
+        html += '<br><strong>ℹ️ Info:</strong> No ps_xid set. Use test controls to set one.';
+      }
+      
+      status.innerHTML = html;
+    }
+
+    // Check if we're on a special path
+    function checkSpecialPath() {
+      const trackingPages = ['/free-consult', '/thank-you', '/schedule', '/consultation'];
+      const currentPath = window.location.pathname.toLowerCase();
+      return trackingPages.some(function(page) { return currentPath.includes(page); });
+    }
+
+    // Initialize status on load
+    document.addEventListener('DOMContentLoaded', function() {
+      refreshStatus();
+      
+      // Auto-refresh status every 2 seconds
+      setInterval(refreshStatus, 2000);
+    });
+
+    // Also refresh when URL changes
+    window.addEventListener('popstate', refreshStatus);
+  </script>
+</body>
+</html>
