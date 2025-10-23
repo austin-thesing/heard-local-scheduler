@@ -188,33 +188,111 @@ function injectPartnerStackId() {
   }
 }
 
-// For HubSpot developer embeds, use the global callback
+// For HubSpot developer embeds, intercept at the message boundary
 function setupDeveloperEmbedHandler() {
   console.log('[PartnerStack] Setting up developer embed handler');
+  
+  // Intercept messages FROM the iframe to the parent
+  const originalPostMessage = window.postMessage;
+  if (window.parent && window.parent.postMessage && window !== window.parent) {
+    // We're in an iframe - intercept outgoing messages
+    window.parent.postMessage = function(data, origin) {
+      console.log('[PartnerStack] Iframe posting message to parent:', data);
+      return originalPostMessage.call(this, data, origin);
+    };
+  }
+  
+  // Monitor for the iframe being added to the DOM
+  const observer = new MutationObserver((mutations) => {
+    mutations.forEach((mutation) => {
+      mutation.addedNodes.forEach((node) => {
+        if (node.tagName === 'IFRAME' && (node.className.includes('hs-form') || node.src.includes('hubspot'))) {
+          console.log('[PartnerStack] HubSpot iframe detected:', node.src);
+          
+          // Wait for iframe to load
+          node.addEventListener('load', () => {
+            console.log('[PartnerStack] HubSpot iframe loaded');
+            const psXid = getPartnerStackId();
+            
+            if (psXid) {
+              // Try to inject into the iframe document
+              try {
+                const iframeDoc = node.contentDocument || node.contentWindow.document;
+                
+                // Inject a script into the iframe to intercept its XHR
+                const script = iframeDoc.createElement('script');
+                script.textContent = `
+                  (function() {
+                    console.log('[PartnerStack-Iframe] Injecting XHR interceptor in iframe');
+                    const psXid = '${psXid}';
+                    
+                    // Intercept XHR in the iframe
+                    const originalSend = XMLHttpRequest.prototype.send;
+                    XMLHttpRequest.prototype.send = function(data) {
+                      console.log('[PartnerStack-Iframe] XHR Send in iframe, data:', data);
+                      
+                      if (this._url && this._url.includes('forms.hubspot')) {
+                        if (typeof data === 'string' && !data.includes('partnerstack_click_id=')) {
+                          data += '&partnerstack_click_id=' + encodeURIComponent(psXid);
+                          console.log('[PartnerStack-Iframe] Injected PartnerStack ID in iframe submission');
+                        }
+                      }
+                      
+                      return originalSend.call(this, data);
+                    };
+                    
+                    const originalOpen = XMLHttpRequest.prototype.open;
+                    XMLHttpRequest.prototype.open = function(method, url) {
+                      this._url = url;
+                      this._method = method;
+                      console.log('[PartnerStack-Iframe] XHR Open in iframe:', method, url);
+                      return originalOpen.apply(this, arguments);
+                    };
+                  })();
+                `;
+                iframeDoc.head.appendChild(script);
+                console.log('[PartnerStack] Injected interceptor into iframe');
+              } catch (e) {
+                console.log('[PartnerStack] Cannot access iframe (cross-origin):', e);
+                // Fall back to postMessage approach
+                tryPostMessageApproach(node, psXid);
+              }
+            }
+          });
+        }
+      });
+    });
+  });
+  
+  observer.observe(document.body, { childList: true, subtree: true });
+  
+  function tryPostMessageApproach(iframe, psXid) {
+    console.log('[PartnerStack] Trying postMessage approach');
+    // Send repeated messages to the iframe
+    const interval = setInterval(() => {
+      try {
+        iframe.contentWindow.postMessage({
+          type: 'setPartnerStackId',
+          value: psXid
+        }, '*');
+      } catch (e) {
+        clearInterval(interval);
+      }
+    }, 500);
+    
+    // Stop after 10 seconds
+    setTimeout(() => clearInterval(interval), 10000);
+  }
   
   // Create a global callback that HubSpot will call
   window.onHubSpotFormReady = function(form) {
     console.log('[PartnerStack] HubSpot form ready via developer embed');
     
-    // Inject the PartnerStack ID
+    // Store PartnerStack ID globally
     const psXid = getPartnerStackId();
     if (psXid) {
-      // Find the hidden field in the form
-      const iframe = document.querySelector('iframe.hs-form-iframe');
-      if (iframe) {
-        try {
-          // Send message to iframe to set the field value
-          iframe.contentWindow.postMessage({
-            type: 'hsFormCallback',
-            eventName: 'setFieldValue', 
-            fieldName: 'partnerstack_click_id',
-            fieldValue: psXid
-          }, '*');
-          console.log('[PartnerStack] Sent message to iframe to set field value');
-        } catch (e) {
-          console.log('[PartnerStack] Could not post message to iframe:', e);
-        }
-      }
+      window._forcePartnerStackId = psXid;
+      console.log('[PartnerStack] Stored PartnerStack ID for submission:', psXid);
     }
   };
   
@@ -521,6 +599,9 @@ function init() {
     '[PartnerStack] Current document readyState:',
     document.readyState
   );
+  
+  // CRITICAL: For developer embeds, we need to act BEFORE HubSpot loads
+  interceptHubSpotDeveloperEmbed();
 
   // Try to inject immediately (for forms that are already loaded)
   console.log('[PartnerStack] Attempting immediate injection');
@@ -543,6 +624,50 @@ function init() {
     console.log('[PartnerStack] Running 3-second delayed injection');
     injectPartnerStackId();
   }, 3000); // Backup for slower-loading forms
+}
+
+// Intercept HubSpot developer embed BEFORE it creates the iframe
+function interceptHubSpotDeveloperEmbed() {
+  console.log('[PartnerStack] Intercepting HubSpot developer embed');
+  
+  // Watch for the hs-form-html div
+  const formContainers = document.querySelectorAll('.hs-form-html[data-form-id]');
+  formContainers.forEach((container) => {
+    const formId = container.getAttribute('data-form-id');
+    const portalId = container.getAttribute('data-portal-id');
+    
+    console.log('[PartnerStack] Found form container:', formId, portalId);
+    
+    // Create a MutationObserver to watch for the iframe
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        mutation.addedNodes.forEach((node) => {
+          if (node.tagName === 'IFRAME') {
+            console.log('[PartnerStack] Iframe added, attempting to modify submission');
+            
+            // Store PartnerStack ID for the submission handler
+            const psXid = getPartnerStackId();
+            if (psXid) {
+              // Add it as a data attribute on the container
+              container.setAttribute('data-partnerstack-id', psXid);
+              
+              // Also try to add a hidden input BEFORE the iframe
+              const hiddenInput = document.createElement('input');
+              hiddenInput.type = 'hidden';
+              hiddenInput.name = 'partnerstack_click_id';
+              hiddenInput.value = psXid;
+              hiddenInput.setAttribute('data-ps-injected', 'true');
+              container.appendChild(hiddenInput);
+              
+              console.log('[PartnerStack] Added hidden input with PartnerStack ID:', psXid);
+            }
+          }
+        });
+      });
+    });
+    
+    observer.observe(container, { childList: true });
+  });
 }
 
 // Intercept form submissions to ensure PartnerStack ID is preserved
