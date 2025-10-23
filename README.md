@@ -16,8 +16,10 @@ This project provides a seamless integration between HubSpot forms and HubSpot M
 
 ## Files
 
+- `ps-cookie-setter.js` - Global PartnerStack cookie capture for affiliate tracking
 - `hubspot-form-router.js` - Main routing logic that listens for HubSpot form submissions
 - `wf-scheduler-injection.js` - Handles scheduler injection and form data prefilling
+- `cookie-helper-hs.js` - HubSpot-specific PartnerStack ID injection helper
 - `form.css` - Heard brand styling for HubSpot forms
 - `embed.html` - Example HTML implementation
 

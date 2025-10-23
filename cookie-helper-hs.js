@@ -23,8 +23,10 @@ function getCookie(name) {
 // Get PartnerStack click ID from multiple sources
 function getPartnerStackId() {
   console.log('[PartnerStack] getPartnerStackId called');
-  // Prefer sessionStorage, fall back to cookie
+  // Priority: sessionStorage → localStorage → cookie
   var psXid = null;
+
+  // Check sessionStorage first (most recent)
   try {
     if (typeof sessionStorage !== 'undefined') {
       console.log('[PartnerStack] Checking sessionStorage for ps_xid');
@@ -35,13 +37,31 @@ function getPartnerStackId() {
     }
   } catch (e) {
     console.warn('[PartnerStack] sessionStorage access error:', e);
-    // sessionStorage might not be accessible due to privacy/settings
     psXid = null;
   }
+
+  // Fall back to localStorage (persistent backup)
+  if (!psXid) {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        console.log('[PartnerStack] Checking localStorage for ps_xid');
+        psXid = localStorage.getItem('ps_xid');
+        console.log('[PartnerStack] localStorage ps_xid:', psXid);
+      } else {
+        console.log('[PartnerStack] localStorage not available');
+      }
+    } catch (e) {
+      console.warn('[PartnerStack] localStorage access error:', e);
+      psXid = null;
+    }
+  }
+
+  // Final fallback to cookie
   if (!psXid) {
     console.log('[PartnerStack] Falling back to cookie');
     psXid = getCookie('ps_xid');
   }
+
   console.log('[PartnerStack] Final PartnerStack ID:', psXid);
   return psXid;
 }
