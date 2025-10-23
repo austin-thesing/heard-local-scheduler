@@ -3,20 +3,16 @@
 ## Build & Development Commands
 - **Build**: `bun run build` (minifies JS/CSS to dist/)
 - **Install deps**: `bun install`
-- **Format**: `bunx prettier --write .` (Prettier configured: single quotes, 2 spaces, trailing commas)
-- **Test**: No test suite configured yet; use `bun test` when tests are added
+- **Format**: `bunx prettier --write .` (single quotes, 2 spaces, trailing commas)
+- **Test**: `bun test` (run single test: `bun test filename.test.js`)
 
 ## Code Style & Conventions
-- **Language**: Vanilla JavaScript (ES6+), no TypeScript
-- **Format**: Prettier rules apply (.prettierrc): single quotes, semicolons, 2-space indent, 80 char lines
-- **Functions**: Use descriptive names (e.g., `getStoredFormData`, `injectScheduler`)
-- **Constants**: UPPER_SNAKE_CASE for configs (e.g., `SCHEDULER_CONFIG`, `DEBUG`)
-- **Error handling**: Wrap storage/DOM operations in try-catch blocks
-- **Logging**: Use conditional `log()` function with DEBUG flag
-- **IIFE pattern**: Wrap scripts in `(function() { "use strict"; ... })()` for isolation
+- **Language**: Vanilla JavaScript (ES6+), ES6 modules, no TypeScript
+- **Format**: Prettier enforced: single quotes, semicolons, 2-space indent, 80 char lines
+- **Functions**: Descriptive names, small/composable, strict typing mindset
+- **Constants**: UPPER_SNAKE_CASE for configs
+- **Error handling**: Wrap storage/DOM ops in try-catch, validate inputs
+- **Pattern**: IIFE wrapper for isolation when needed
 
 ## Cursor Rules
-Follow .cursor/rules/ guidelines:
-- PLAN→CODE→TESTS→NOTES workflow, validate inputs, handle errors gracefully
-- Small composable functions, focused diffs, keep docs current
-- Use ast-grep for code searches when available
+Follow .cursor/rules/ workflow: PLAN→CODE→TESTS→NOTES, focused diffs, idiomatic style

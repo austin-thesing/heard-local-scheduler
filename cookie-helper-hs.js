@@ -78,6 +78,24 @@ function injectPartnerStackId() {
   }
   console.log('[PartnerStack] Injecting PartnerStack ID:', psXid);
 
+  // Try to update via HubSpot API first if available
+  if (window.HubSpotForms && typeof window.HubSpotForms.updateFieldValue === 'function') {
+    console.log('[PartnerStack] HubSpot API available, attempting to update field via API');
+    try {
+      // Update all possible field variations
+      ['partnerstack_click_id', '0-1/partnerstack_click_id', '0-2/partnerstack_click_id', '0-3/partnerstack_click_id'].forEach(function(fieldName) {
+        try {
+          window.HubSpotForms.updateFieldValue('partnerstack_click_id', fieldName, psXid);
+          console.log('[PartnerStack] Updated field via HubSpot API:', fieldName);
+        } catch (e) {
+          // Field might not exist in this form
+        }
+      });
+    } catch (e) {
+      console.warn('[PartnerStack] Failed to update via HubSpot API:', e);
+    }
+  }
+
   // Find all PartnerStack input fields in existing forms
   const selectors = [
     'input[name="partnerstack_click_id"]',
@@ -101,14 +119,30 @@ function injectPartnerStackId() {
     if (input && !input.value) {
       try {
         console.log('[PartnerStack] Injecting into field:', input.name);
+        
+        // Update DOM value
         input.value = psXid;
         input.setAttribute('value', psXid);
 
+        // Try to update HubSpot's internal state using React-like property setter
+        if (input._valueTracker) {
+          input._valueTracker.setValue(psXid);
+        }
+
+        // Trigger native input event for React/HubSpot forms
+        const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+        nativeInputValueSetter.call(input, psXid);
+        
         // Trigger events to ensure form validation and submission handlers see the value
         const inputEvent = new Event('input', { bubbles: true });
         const changeEvent = new Event('change', { bubbles: true });
+        const focusEvent = new Event('focus', { bubbles: true });
+        const blurEvent = new Event('blur', { bubbles: true });
+        
+        input.dispatchEvent(focusEvent);
         input.dispatchEvent(inputEvent);
         input.dispatchEvent(changeEvent);
+        input.dispatchEvent(blurEvent);
 
         console.log(
           '[PartnerStack] Successfully injected ID into field:',
@@ -130,6 +164,28 @@ function injectPartnerStackId() {
       );
     }
   });
+
+  // Also try to update HubSpot form instance directly if available
+  try {
+    if (window.hbspt && window.hbspt.forms && window.hbspt.forms.forEach) {
+      window.hbspt.forms.forEach(function(form) {
+        if (form && form.formInstance) {
+          console.log('[PartnerStack] Found HubSpot form instance, attempting direct update');
+          // Try to set the field value in the form instance
+          if (form.formInstance.options && form.formInstance.options.fields) {
+            form.formInstance.options.fields.forEach(function(field) {
+              if (field.name === 'partnerstack_click_id' || field.name.includes('partnerstack_click_id')) {
+                field.value = psXid;
+                console.log('[PartnerStack] Updated field in form instance:', field.name);
+              }
+            });
+          }
+        }
+      });
+    }
+  } catch (e) {
+    console.log('[PartnerStack] Could not update form instances directly:', e);
+  }
 }
 
 // For HubSpot developer embeds, listen for form ready events
@@ -164,6 +220,34 @@ function setupHubSpotListener() {
           );
           // Small delay to ensure form is fully rendered
           setTimeout(injectPartnerStackId, 100);
+          // Also inject again after a longer delay to ensure it's captured
+          setTimeout(injectPartnerStackId, 500);
+        }
+        
+        // Also inject just before submission to ensure it's included
+        if (eventName === 'onFormSubmit') {
+          console.log(
+            '[PartnerStack] Form submit event detected, ensuring PartnerStack ID is injected'
+          );
+          injectPartnerStackId();
+          
+          // Also try to add it to the submission data directly
+          const psXid = getPartnerStackId();
+          if (psXid && payload.data) {
+            console.log('[PartnerStack] Adding PartnerStack ID to submission data');
+            if (!payload.data.partnerstack_click_id) {
+              payload.data.partnerstack_click_id = psXid;
+            }
+            // Also try to update the fields array if it exists
+            if (payload.data.fields && Array.isArray(payload.data.fields)) {
+              const existingField = payload.data.fields.find(f => f.name === 'partnerstack_click_id');
+              if (existingField) {
+                existingField.value = psXid;
+              } else {
+                payload.data.fields.push({ name: 'partnerstack_click_id', value: psXid });
+              }
+            }
+          }
         }
       } else {
         console.log(
@@ -176,6 +260,34 @@ function setupHubSpotListener() {
       // Ignore message parsing errors
     }
   });
+  
+  // Also hook into HubSpot's onBeforeFormSubmit if available
+  if (window.hbspt && window.hbspt.forms && window.hbspt.forms.create) {
+    console.log('[PartnerStack] Attempting to hook into HubSpot form submission');
+    const originalCreate = window.hbspt.forms.create;
+    window.hbspt.forms.create = function(options) {
+      // Add onBeforeFormSubmit callback if not already present
+      if (!options.onBeforeFormSubmit) {
+        options.onBeforeFormSubmit = function(formData) {
+          console.log('[PartnerStack] onBeforeFormSubmit triggered');
+          const psXid = getPartnerStackId();
+          if (psXid) {
+            // Ensure PartnerStack ID is in the submission
+            const partnerStackField = formData.find(f => f.name === 'partnerstack_click_id');
+            if (partnerStackField) {
+              partnerStackField.value = psXid;
+              console.log('[PartnerStack] Updated PartnerStack field in submission data');
+            } else {
+              formData.push({ name: 'partnerstack_click_id', value: psXid });
+              console.log('[PartnerStack] Added PartnerStack field to submission data');
+            }
+          }
+          return formData;
+        };
+      }
+      return originalCreate.call(this, options);
+    };
+  }
 }
 
 // Initialize when DOM is ready
