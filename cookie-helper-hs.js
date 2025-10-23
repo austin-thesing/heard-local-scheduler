@@ -300,48 +300,61 @@ function setupHubSpotListener() {
       const psXid = window._forcePartnerStackId || window._persistentPartnerStackId || getPartnerStackId();
       
       if (psXid && data) {
-        console.log('[PartnerStack] PartnerStack ID to inject:', psXid);
-        console.log('[PartnerStack] Original data length:', data.length);
+        // Store in localStorage for debugging (survives redirect)
+        try {
+          localStorage.setItem('ps_last_submission', JSON.stringify({
+            timestamp: new Date().toISOString(),
+            url: this._url,
+            psXid: psXid,
+            dataLength: data.length,
+            status: 'intercepted'
+          }));
+        } catch (e) {}
         
         try {
           // Try to parse and modify the submission data
           if (typeof data === 'string') {
-            // URL encoded form data
-            if (data.includes('&')) {
-              // Check if partnerstack_click_id is already in the data
-              if (!data.includes('partnerstack_click_id')) {
+            // URL encoded form data (most common for HubSpot)
+            if (data.includes('=') && data.includes('&')) {
+              // ALWAYS inject the PartnerStack ID, regardless of whether field exists
+              if (!data.includes('partnerstack_click_id=')) {
+                // Field doesn't exist at all, add it
                 data += '&partnerstack_click_id=' + encodeURIComponent(psXid);
-                console.log('[PartnerStack] ✅ Added PartnerStack ID to URL-encoded submission');
-              } else if (data.match(/partnerstack_click_id=(?:&|$)/)) {
-                // Field exists but is empty, replace it
-                data = data.replace(/partnerstack_click_id=(?:&|$)/, 'partnerstack_click_id=' + encodeURIComponent(psXid) + '&');
-                console.log('[PartnerStack] ✅ Replaced empty PartnerStack ID in submission');
+                console.log('[PartnerStack] ✅ INJECTED PartnerStack ID to submission');
+                localStorage.setItem('ps_injection_status', 'added_new_field');
               } else {
-                // Field exists with a value, check if it's correct
-                const match = data.match(/partnerstack_click_id=([^&]*)/);
-                if (match && match[1] && decodeURIComponent(match[1]) !== psXid) {
-                  // Wrong value, replace it
-                  data = data.replace(/partnerstack_click_id=[^&]*/, 'partnerstack_click_id=' + encodeURIComponent(psXid));
-                  console.log('[PartnerStack] ✅ Replaced incorrect PartnerStack ID');
-                } else if (match && match[1]) {
-                  console.log('[PartnerStack] ✅ PartnerStack ID already correct in submission:', decodeURIComponent(match[1]));
-                }
+                // Field exists, make sure it has the right value
+                // Replace any existing value (empty or wrong)
+                data = data.replace(/partnerstack_click_id=[^&]*/g, 'partnerstack_click_id=' + encodeURIComponent(psXid));
+                console.log('[PartnerStack] ✅ REPLACED PartnerStack field with correct ID');
+                localStorage.setItem('ps_injection_status', 'replaced_existing');
+              }
+              
+              // Log the result for debugging
+              const finalMatch = data.match(/partnerstack_click_id=([^&]*)/);
+              if (finalMatch && finalMatch[1]) {
+                console.log('[PartnerStack] ✅ FINAL VALUE in submission:', decodeURIComponent(finalMatch[1]));
+                localStorage.setItem('ps_final_value', decodeURIComponent(finalMatch[1]));
               }
             }
-            // JSON data
+            // JSON data format
             else if (data.startsWith('{')) {
               try {
                 const jsonData = JSON.parse(data);
+                // HubSpot usually has a fields array
                 if (jsonData.fields && Array.isArray(jsonData.fields)) {
                   const psField = jsonData.fields.find(f => f.name === 'partnerstack_click_id');
                   if (psField) {
                     psField.value = psXid;
+                    console.log('[PartnerStack] ✅ Updated existing field in JSON');
+                    localStorage.setItem('ps_injection_status', 'json_updated');
                   } else {
                     jsonData.fields.push({ name: 'partnerstack_click_id', value: psXid });
+                    console.log('[PartnerStack] ✅ Added new field to JSON');
+                    localStorage.setItem('ps_injection_status', 'json_added');
                   }
                   data = JSON.stringify(jsonData);
-                  console.log('[PartnerStack] Added PartnerStack ID to JSON submission');
-                  console.log('[PartnerStack] Modified JSON data:', jsonData);
+                  localStorage.setItem('ps_final_value', psXid);
                 }
               } catch (e) {
                 console.log('[PartnerStack] Could not parse JSON data:', e);
@@ -351,10 +364,11 @@ function setupHubSpotListener() {
             // FormData object
             if (!data.has('partnerstack_click_id') || !data.get('partnerstack_click_id')) {
               data.set('partnerstack_click_id', psXid);
-              console.log('[PartnerStack] Added PartnerStack ID to FormData submission');
+              console.log('[PartnerStack] ✅ Added PartnerStack ID to FormData submission');
+              localStorage.setItem('ps_injection_status', 'formdata_added');
             }
           }
-          } catch (e) {
+        } catch (e) {
           console.warn('[PartnerStack] Error modifying submission data:', e);
         }
         console.log('[PartnerStack] Final submission data being sent:', data);
@@ -614,6 +628,38 @@ window.PartnerStackDebug = {
   wasPartnerStackIncluded: function() {
     if (!this.lastSubmission) return false;
     return this.lastSubmission.includes('partnerstack_click_id') && !this.lastSubmission.includes('partnerstack_click_id=&');
+  },
+  // Check what was stored in localStorage (survives redirect)
+  checkLastInjection: function() {
+    const status = localStorage.getItem('ps_injection_status');
+    const value = localStorage.getItem('ps_final_value');
+    const submission = localStorage.getItem('ps_last_submission');
+    
+    console.log('=== PartnerStack Injection Report ===');
+    console.log('Status:', status);
+    console.log('Final Value:', value);
+    if (submission) {
+      try {
+        const data = JSON.parse(submission);
+        console.log('Submission Details:', data);
+      } catch (e) {
+        console.log('Submission Data:', submission);
+      }
+    }
+    console.log('=====================================');
+    
+    return {
+      status: status,
+      value: value,
+      submission: submission
+    };
+  },
+  // Clear debug data
+  clearDebugData: function() {
+    localStorage.removeItem('ps_injection_status');
+    localStorage.removeItem('ps_final_value');
+    localStorage.removeItem('ps_last_submission');
+    console.log('Debug data cleared');
   }
 };
 
