@@ -162,6 +162,23 @@
       const originalValue = input.value;
       if (!input.value) {
         input.value = partnerstackId;
+        
+        try {
+          input.setAttribute('value', partnerstackId);
+          
+          const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+            window.HTMLInputElement.prototype,
+            'value'
+          ).set;
+          nativeInputValueSetter.call(input, partnerstackId);
+          
+          const event = new Event('input', { bubbles: true });
+          input.dispatchEvent(event);
+          const changeEvent = new Event('change', { bubbles: true });
+          input.dispatchEvent(changeEvent);
+        } catch (e) {
+          log('Failed to trigger input events:', e);
+        }
       }
 
       window._capturedFormData[input.name] = input.value;
@@ -496,9 +513,12 @@
 
     const partnerstackId = getPartnerstackClickId();
     if (partnerstackId) {
-      if (!formData[PARTNERSTACK_FIELD_NAME]) {
-        formData[PARTNERSTACK_FIELD_NAME] = partnerstackId;
-      }
+      formData['partnerstack_click_id'] = partnerstackId;
+      formData['0-1/partnerstack_click_id'] = partnerstackId;
+      formData['0-2/partnerstack_click_id'] = partnerstackId;
+      formData['0-3/partnerstack_click_id'] = partnerstackId;
+      
+      log('Injected PartnerStack ID into submission:', partnerstackId);
 
       try {
         sessionStorage.setItem(PARTNERSTACK_FIELD_NAME, partnerstackId);
@@ -716,6 +736,20 @@
           const partnerstackId = getPartnerstackClickId();
           if (partnerstackId && !input.value) {
             input.value = partnerstackId;
+            try {
+              input.setAttribute('value', partnerstackId);
+              const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+                window.HTMLInputElement.prototype,
+                'value'
+              ).set;
+              nativeInputValueSetter.call(input, partnerstackId);
+              const event = new Event('input', { bubbles: true });
+              input.dispatchEvent(event);
+              const changeEvent = new Event('change', { bubbles: true });
+              input.dispatchEvent(changeEvent);
+            } catch (e) {
+              log('Failed to trigger events on partnerstack field:', e);
+            }
             captureValue(input, 'partnerstack_prefill');
           }
         }
@@ -747,6 +781,20 @@
                 input.name.endsWith('/' + PARTNERSTACK_FIELD_NAME))
             ) {
               input.value = partnerstackId;
+              try {
+                input.setAttribute('value', partnerstackId);
+                const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+                  window.HTMLInputElement.prototype,
+                  'value'
+                ).set;
+                nativeInputValueSetter.call(input, partnerstackId);
+                const event = new Event('input', { bubbles: true });
+                input.dispatchEvent(event);
+                const changeEvent = new Event('change', { bubbles: true });
+                input.dispatchEvent(changeEvent);
+              } catch (e) {
+                log('Failed to trigger events on hidden partnerstack field:', e);
+              }
               captureValue(input, 'partnerstack_prefill_hidden');
             }
           }
