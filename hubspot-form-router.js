@@ -447,7 +447,8 @@
     }
     HAS_ROUTED = true;
 
-    const partnerstackId = getPartnerstackClickId();
+    // Use persistent ID first, then try to get fresh one
+    const partnerstackId = window._persistentPartnerStackId || getPartnerstackClickId();
     if (partnerstackId) {
       formData['partnerstack_click_id'] = partnerstackId;
       formData['0-1/partnerstack_click_id'] = partnerstackId;
@@ -613,10 +614,15 @@
     }
 
     // Monitor form inputs using MutationObserver
-    function monitorFormInputs() {
-      // PartnerStack field injection handled by cookie-helper-hs.js
+  function monitorFormInputs() {
+    // Store PartnerStack ID persistently if found
+    const partnerstackId = getPartnerstackClickId();
+    if (partnerstackId) {
+      window._persistentPartnerStackId = partnerstackId;
+      log('Stored persistent PartnerStack ID:', partnerstackId);
+    }
 
-      const observer = new MutationObserver((mutations) => {
+    const observer = new MutationObserver((mutations) => {
         // Process only new nodes, not all inputs every time
         const addedNodes = [];
         mutations.forEach((mutation) => {
@@ -661,27 +667,48 @@
 
         // PartnerStack field injection handled by cookie-helper-hs.js
 
-        // For hidden inputs, monitor value changes directly
-        if (input.type === 'hidden' && input.name) {
-          // Use a simple interval check for hidden inputs (more reliable than property override)
-          let lastValue = input.value;
-          const checkInterval = setInterval(() => {
-            if (input.value !== lastValue) {
-              lastValue = input.value;
-              captureValue(input, 'programmatic');
-            }
-            // Stop checking if element is removed
-            if (!document.body.contains(input)) {
-              clearInterval(checkInterval);
-            }
-          }, 500); // Check every 500ms
-
-          // Capture initial value
-          if (input.value) {
-            captureValue(input, 'initial');
+      // For hidden inputs, monitor value changes directly
+      if (input.type === 'hidden' && input.name) {
+        // Special handling for PartnerStack fields
+        if (input.name.includes('partnerstack_click_id')) {
+          // Always preserve PartnerStack ID
+          const psId = window._persistentPartnerStackId || getPartnerstackClickId();
+          if (psId && !input.value) {
+            input.value = psId;
+            input.setAttribute('value', psId);
+            log('Preserved PartnerStack ID in hidden field:', input.name);
           }
-          // PartnerStack field injection handled by cookie-helper-hs.js
         }
+        
+        // Use a simple interval check for hidden inputs (more reliable than property override)
+        let lastValue = input.value;
+        const checkInterval = setInterval(() => {
+          // For PartnerStack fields, ensure value is never cleared
+          if (input.name.includes('partnerstack_click_id')) {
+            const psId = window._persistentPartnerStackId || getPartnerstackClickId();
+            if (psId && (!input.value || input.value === '')) {
+              input.value = psId;
+              input.setAttribute('value', psId);
+              log('Restored cleared PartnerStack ID in field:', input.name);
+            }
+          }
+          
+          if (input.value !== lastValue) {
+            lastValue = input.value;
+            captureValue(input, 'programmatic');
+          }
+          // Stop checking if element is removed
+          if (!document.body.contains(input)) {
+            clearInterval(checkInterval);
+          }
+        }, 100); // Check every 100ms for faster restoration
+
+        // Capture initial value
+        if (input.value) {
+          captureValue(input, 'initial');
+        }
+        // PartnerStack field injection handled by cookie-helper-hs.js
+      }
         // For radio buttons
         else if (input.type === 'radio') {
           input.addEventListener('change', () => captureValue(input));

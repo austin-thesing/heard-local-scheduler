@@ -191,9 +191,124 @@ function injectPartnerStackId() {
 // For HubSpot developer embeds, listen for form ready events
 function setupHubSpotListener() {
   console.log('[PartnerStack] setupHubSpotListener called');
+  
+  // Hook into XMLHttpRequest to intercept HubSpot form submissions
+  const originalXHRSend = XMLHttpRequest.prototype.send;
+  XMLHttpRequest.prototype.send = function(data) {
+    // Check if this is a HubSpot form submission
+    if (this._url && (this._url.includes('forms.hubspot.com') || this._url.includes('hsforms.com'))) {
+      console.log('[PartnerStack] Intercepted HubSpot form submission');
+      const psXid = getPartnerStackId();
+      
+      if (psXid && data) {
+        try {
+          // Try to parse and modify the submission data
+          if (typeof data === 'string') {
+            // URL encoded form data
+            if (data.includes('&')) {
+              // Check if partnerstack_click_id is already in the data
+              if (!data.includes('partnerstack_click_id=')) {
+                data += '&partnerstack_click_id=' + encodeURIComponent(psXid);
+                console.log('[PartnerStack] Added PartnerStack ID to URL-encoded submission');
+              } else if (data.includes('partnerstack_click_id=&') || data.endsWith('partnerstack_click_id=')) {
+                // Field exists but is empty, replace it
+                data = data.replace(/partnerstack_click_id=[^&]*/, 'partnerstack_click_id=' + encodeURIComponent(psXid));
+                console.log('[PartnerStack] Replaced empty PartnerStack ID in submission');
+              }
+            }
+            // JSON data
+            else if (data.startsWith('{')) {
+              try {
+                const jsonData = JSON.parse(data);
+                if (jsonData.fields && Array.isArray(jsonData.fields)) {
+                  const psField = jsonData.fields.find(f => f.name === 'partnerstack_click_id');
+                  if (psField) {
+                    psField.value = psXid;
+                  } else {
+                    jsonData.fields.push({ name: 'partnerstack_click_id', value: psXid });
+                  }
+                  data = JSON.stringify(jsonData);
+                  console.log('[PartnerStack] Added PartnerStack ID to JSON submission');
+                }
+              } catch (e) {
+                console.log('[PartnerStack] Could not parse JSON data:', e);
+              }
+            }
+          } else if (data instanceof FormData) {
+            // FormData object
+            if (!data.has('partnerstack_click_id') || !data.get('partnerstack_click_id')) {
+              data.set('partnerstack_click_id', psXid);
+              console.log('[PartnerStack] Added PartnerStack ID to FormData submission');
+            }
+          }
+        } catch (e) {
+          console.warn('[PartnerStack] Error modifying submission data:', e);
+        }
+      }
+    }
+    
+    // Call the original send method with potentially modified data
+    return originalXHRSend.call(this, data);
+  };
+  
+  // Also intercept the open method to capture the URL
+  const originalXHROpen = XMLHttpRequest.prototype.open;
+  XMLHttpRequest.prototype.open = function(method, url) {
+    this._url = url;
+    return originalXHROpen.apply(this, arguments);
+  };
+  
+  // Hook into fetch API as well (newer forms might use this)
+  if (window.fetch) {
+    const originalFetch = window.fetch;
+    window.fetch = function(url, options) {
+      if (url && (url.includes('forms.hubspot.com') || url.includes('hsforms.com'))) {
+        console.log('[PartnerStack] Intercepted HubSpot fetch submission');
+        const psXid = getPartnerStackId();
+        
+        if (psXid && options && options.body) {
+          try {
+            if (typeof options.body === 'string') {
+              // URL encoded or JSON
+              if (options.body.includes('&')) {
+                if (!options.body.includes('partnerstack_click_id=')) {
+                  options.body += '&partnerstack_click_id=' + encodeURIComponent(psXid);
+                } else if (options.body.includes('partnerstack_click_id=&') || options.body.endsWith('partnerstack_click_id=')) {
+                  options.body = options.body.replace(/partnerstack_click_id=[^&]*/, 'partnerstack_click_id=' + encodeURIComponent(psXid));
+                }
+                console.log('[PartnerStack] Modified fetch body with PartnerStack ID');
+              } else if (options.body.startsWith('{')) {
+                const jsonData = JSON.parse(options.body);
+                if (jsonData.fields && Array.isArray(jsonData.fields)) {
+                  const psField = jsonData.fields.find(f => f.name === 'partnerstack_click_id');
+                  if (psField) {
+                    psField.value = psXid;
+                  } else {
+                    jsonData.fields.push({ name: 'partnerstack_click_id', value: psXid });
+                  }
+                  options.body = JSON.stringify(jsonData);
+                  console.log('[PartnerStack] Added PartnerStack ID to fetch JSON body');
+                }
+              }
+            } else if (options.body instanceof FormData) {
+              if (!options.body.has('partnerstack_click_id') || !options.body.get('partnerstack_click_id')) {
+                options.body.set('partnerstack_click_id', psXid);
+                console.log('[PartnerStack] Added PartnerStack ID to fetch FormData');
+              }
+            }
+          } catch (e) {
+            console.warn('[PartnerStack] Error modifying fetch body:', e);
+          }
+        }
+      }
+      
+      return originalFetch.call(this, url, options);
+    };
+  }
+  
   if (!window.hbspt || !window.hbspt.forms) {
     console.log(
-      '[PartnerStack] HubSpot forms library not available, skipping listener setup'
+      '[PartnerStack] HubSpot forms library not available yet'
     );
     return;
   }
@@ -203,7 +318,6 @@ function setupHubSpotListener() {
 
   // Listen for postMessage events from HubSpot forms
   window.addEventListener('message', function (event) {
-    console.log('[PartnerStack] Received message event:', event.data);
     try {
       if (event.data && event.data.type === 'hsFormCallback') {
         const payload = event.data;
@@ -223,71 +337,12 @@ function setupHubSpotListener() {
           // Also inject again after a longer delay to ensure it's captured
           setTimeout(injectPartnerStackId, 500);
         }
-        
-        // Also inject just before submission to ensure it's included
-        if (eventName === 'onFormSubmit') {
-          console.log(
-            '[PartnerStack] Form submit event detected, ensuring PartnerStack ID is injected'
-          );
-          injectPartnerStackId();
-          
-          // Also try to add it to the submission data directly
-          const psXid = getPartnerStackId();
-          if (psXid && payload.data) {
-            console.log('[PartnerStack] Adding PartnerStack ID to submission data');
-            if (!payload.data.partnerstack_click_id) {
-              payload.data.partnerstack_click_id = psXid;
-            }
-            // Also try to update the fields array if it exists
-            if (payload.data.fields && Array.isArray(payload.data.fields)) {
-              const existingField = payload.data.fields.find(f => f.name === 'partnerstack_click_id');
-              if (existingField) {
-                existingField.value = psXid;
-              } else {
-                payload.data.fields.push({ name: 'partnerstack_click_id', value: psXid });
-              }
-            }
-          }
-        }
-      } else {
-        console.log(
-          '[PartnerStack] Ignoring non-HubSpot message:',
-          event.data ? event.data.type : 'no type'
-        );
       }
     } catch (e) {
       console.warn('[PartnerStack] Error processing message event:', e);
       // Ignore message parsing errors
     }
   });
-  
-  // Also hook into HubSpot's onBeforeFormSubmit if available
-  if (window.hbspt && window.hbspt.forms && window.hbspt.forms.create) {
-    console.log('[PartnerStack] Attempting to hook into HubSpot form submission');
-    const originalCreate = window.hbspt.forms.create;
-    window.hbspt.forms.create = function(options) {
-      // Add onBeforeFormSubmit callback if not already present
-      if (!options.onBeforeFormSubmit) {
-        options.onBeforeFormSubmit = function(formData) {
-          console.log('[PartnerStack] onBeforeFormSubmit triggered');
-          const psXid = getPartnerStackId();
-          if (psXid) {
-            // Ensure PartnerStack ID is in the submission
-            const partnerStackField = formData.find(f => f.name === 'partnerstack_click_id');
-            if (partnerStackField) {
-              partnerStackField.value = psXid;
-              console.log('[PartnerStack] Updated PartnerStack field in submission data');
-            } else {
-              formData.push({ name: 'partnerstack_click_id', value: psXid });
-              console.log('[PartnerStack] Added PartnerStack field to submission data');
-            }
-          }
-          return formData;
-        };
-      }
-      return originalCreate.call(this, options);
-    };
-  }
 }
 
 // Initialize when DOM is ready
@@ -305,6 +360,9 @@ function init() {
   // Set up HubSpot event listeners
   console.log('[PartnerStack] Setting up HubSpot listeners');
   setupHubSpotListener();
+  
+  // Set up form submit interceptor to prevent value clearing
+  setupFormSubmitInterceptor();
 
   // Also try again after a short delay in case forms load asynchronously
   console.log('[PartnerStack] Scheduling delayed injections at 1s and 3s');
@@ -316,6 +374,100 @@ function init() {
     console.log('[PartnerStack] Running 3-second delayed injection');
     injectPartnerStackId();
   }, 3000); // Backup for slower-loading forms
+}
+
+// Intercept form submissions to ensure PartnerStack ID is preserved
+function setupFormSubmitInterceptor() {
+  console.log('[PartnerStack] Setting up form submit interceptor');
+  
+  // Monitor for form submit events using capture phase
+  document.addEventListener('submit', function(e) {
+    console.log('[PartnerStack] Form submit event captured');
+    const psXid = getPartnerStackId();
+    if (psXid) {
+      // Re-inject the value right before submission
+      const inputs = e.target.querySelectorAll('input[name*="partnerstack"], input[name="ps_xid"]');
+      inputs.forEach(function(input) {
+        if (input.name.includes('partnerstack_click_id') || input.name === 'ps_xid') {
+          console.log('[PartnerStack] Re-injecting value on submit for field:', input.name);
+          input.value = psXid;
+          input.setAttribute('value', psXid);
+          
+          // Force the value using defineProperty to make it stick
+          try {
+            Object.defineProperty(input, 'value', {
+              get: function() { return psXid; },
+              set: function() { return psXid; },
+              configurable: true
+            });
+          } catch (err) {
+            console.log('[PartnerStack] Could not define property:', err);
+          }
+        }
+      });
+    }
+  }, true); // Use capture phase to run before HubSpot's handlers
+  
+  // Also monitor for click events on submit buttons
+  document.addEventListener('click', function(e) {
+    if (e.target && (e.target.type === 'submit' || e.target.classList.contains('hs-button'))) {
+      console.log('[PartnerStack] Submit button clicked, ensuring PartnerStack ID is set');
+      const psXid = getPartnerStackId();
+      if (psXid) {
+        // Find all partnerstack fields and ensure they have the value
+        const inputs = document.querySelectorAll('input[name*="partnerstack"], input[name="ps_xid"]');
+        inputs.forEach(function(input) {
+          if (!input.value && (input.name.includes('partnerstack_click_id') || input.name === 'ps_xid')) {
+            console.log('[PartnerStack] Setting value for empty field on button click:', input.name);
+            input.value = psXid;
+            input.setAttribute('value', psXid);
+          }
+        });
+      }
+      
+      // Small delay to re-inject after HubSpot might clear it
+      setTimeout(function() {
+        injectPartnerStackId();
+      }, 10);
+    }
+  }, true);
+  
+  // Monitor for value changes and restore them if cleared
+  const monitorValueChanges = function() {
+    const psXid = getPartnerStackId();
+    if (!psXid) return;
+    
+    const inputs = document.querySelectorAll('input[name*="partnerstack"], input[name="ps_xid"]');
+    inputs.forEach(function(input) {
+      if (input.name.includes('partnerstack_click_id') || input.name === 'ps_xid') {
+        // Store the expected value
+        input.dataset.expectedValue = psXid;
+        
+        // Override the value property setter
+        const originalDescriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+        if (originalDescriptor) {
+          Object.defineProperty(input, 'value', {
+            get: function() {
+              return psXid;
+            },
+            set: function(newValue) {
+              if (!newValue || newValue === '') {
+                console.log('[PartnerStack] Prevented clearing of field:', input.name);
+                originalDescriptor.set.call(this, psXid);
+              } else {
+                originalDescriptor.set.call(this, newValue);
+              }
+            },
+            configurable: true
+          });
+        }
+      }
+    });
+  };
+  
+  // Run value monitor after a delay to catch dynamically added fields
+  setTimeout(monitorValueChanges, 500);
+  setTimeout(monitorValueChanges, 2000);
 }
 
 // Expose functions globally for the form-handler interface
