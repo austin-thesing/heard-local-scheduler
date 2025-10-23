@@ -293,8 +293,10 @@ function setupHubSpotListener() {
   // Hook into XMLHttpRequest to intercept HubSpot form submissions
   const originalXHRSend = XMLHttpRequest.prototype.send;
   XMLHttpRequest.prototype.send = function(data) {
-    // Check if this is a HubSpot form submission
-    if (this._url && (this._url.includes('forms.hubspot.com') || this._url.includes('hsforms.com'))) {
+    console.log('[PartnerStack] XHR Send called, URL:', this._url);
+    
+    // Check if this is a HubSpot form submission (broader check)
+    if (this._url && (this._url.includes('forms.hubspot') || this._url.includes('hsforms') || this._url.includes('hs-analytics'))) {
       console.log('[PartnerStack] 🎯 INTERCEPTED HubSpot form submission to:', this._url);
       // Use forced ID if available (set by router), otherwise get from storage
       const psXid = window._forcePartnerStackId || window._persistentPartnerStackId || getPartnerStackId();
@@ -391,6 +393,11 @@ function setupHubSpotListener() {
   const originalXHROpen = XMLHttpRequest.prototype.open;
   XMLHttpRequest.prototype.open = function(method, url) {
     this._url = url;
+    this._method = method;
+    // Log ALL XHR requests to see what's happening
+    if (method === 'POST') {
+      console.log('[PartnerStack] XHR POST detected to:', url);
+    }
     return originalXHROpen.apply(this, arguments);
   };
   

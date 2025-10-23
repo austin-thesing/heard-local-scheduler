@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Local Test - HubSpot Form</title>
+    <meta charset="utf-8">
+    <script>
+        // Set test PartnerStack ID in cookie
+        document.cookie = "ps_xid=TEST_LOCAL_123; path=/";
+        console.log('Test PartnerStack ID set: TEST_LOCAL_123');
+    </script>
+</head>
+<body>
+    <h1>Local HubSpot Form Test</h1>
+    
+    <!-- Load the form handler BEFORE the HubSpot embed -->
+    <script src="dist/form-handler.js"></script>
+    
+    <!-- HubSpot Developer Embed -->
+    <script src="https://js.hsforms.net/forms/embed/developer/7507639.js"></script>
+    <div class="hs-form-html" data-region="na1" data-form-id="d65fd986-7f2a-40ae-9491-79b9910b3b7c" data-portal-id="7507639"></div>
+    
+    <hr>
+    <h2>Debug Console</h2>
+    <button onclick="checkDebug()">Check Debug Data</button>
+    <button onclick="clearDebug()">Clear Debug Data</button>
+    <pre id="debug-output"></pre>
+    
+    <script>
+        function checkDebug() {
+            const status = localStorage.getItem('ps_injection_status');
+            const value = localStorage.getItem('ps_final_value');
+            const submission = localStorage.getItem('ps_last_submission');
+            
+            const output = {
+                status: status,
+                value: value,
+                submission: submission ? JSON.parse(submission) : null
+            };
+            
+            document.getElementById('debug-output').textContent = JSON.stringify(output, null, 2);
+            console.log('Debug Data:', output);
+        }
+        
+        function clearDebug() {
+            localStorage.removeItem('ps_injection_status');
+            localStorage.removeItem('ps_final_value');
+            localStorage.removeItem('ps_last_submission');
+            document.getElementById('debug-output').textContent = 'Cleared';
+        }
+        
+        // Also log all XHR requests
+        const originalOpen = XMLHttpRequest.prototype.open;
+        XMLHttpRequest.prototype.open = function(method, url) {
+            console.log(`[Test Page] XHR ${method} to:`, url);
+            return originalOpen.apply(this, arguments);
+        };
+    </script>
+</body>
+</html>
