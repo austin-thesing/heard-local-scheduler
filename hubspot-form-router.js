@@ -94,11 +94,7 @@
   }
 
   const PARTNERSTACK_FIELD_NAME = 'partnerstack_click_id';
-  const PARTNERSTACK_STORAGE_KEYS = [
-    PARTNERSTACK_FIELD_NAME,
-    'ps_xid',
-    'psx_id',
-  ];
+  const PARTNERSTACK_STORAGE_KEYS = ['ps_xid', 'psx_id'];
   const PARTNERSTACK_COOKIE_KEYS = ['ps_xid', 'psx_id'];
 
   function getCookieValue(name) {
@@ -461,13 +457,13 @@
       log('Injected PartnerStack ID into submission:', partnerstackId);
 
       try {
-        sessionStorage.setItem(PARTNERSTACK_FIELD_NAME, partnerstackId);
+        sessionStorage.setItem('ps_xid', partnerstackId);
       } catch (e) {
         log('Failed to persist partnerstack id in sessionStorage:', e);
       }
 
       try {
-        localStorage.setItem(PARTNERSTACK_FIELD_NAME, partnerstackId);
+        localStorage.setItem('ps_xid', partnerstackId);
       } catch (e) {
         log('Failed to persist partnerstack id in localStorage:', e);
       }
