@@ -198,6 +198,55 @@
     });
   }
 
+  function submitPartnerstackToHubSpot(formGuid, portalId, partnerstackId, email) {
+    if (!formGuid || !portalId || !partnerstackId) {
+      log('Missing required data for HubSpot submission');
+      return;
+    }
+
+    const updateUrl = `https://api.hsforms.com/submissions/v3/integration/submit/${portalId}/${formGuid}`;
+    
+    const updatePayload = {
+      fields: [
+        {
+          name: 'partnerstack_click_id',
+          value: partnerstackId
+        }
+      ],
+      context: {
+        pageUri: window.location.href,
+        pageName: document.title
+      }
+    };
+
+    if (email) {
+      updatePayload.fields.push({
+        name: 'email',
+        value: email
+      });
+    }
+
+    log('Submitting PartnerStack ID to HubSpot:', updatePayload);
+
+    fetch(updateUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(updatePayload),
+    })
+      .then((response) => {
+        if (response.ok) {
+          log('Successfully submitted PartnerStack ID to HubSpot');
+        } else {
+          log('Failed to submit PartnerStack ID to HubSpot:', response.status);
+        }
+      })
+      .catch((error) => {
+        log('Error submitting PartnerStack ID to HubSpot:', error);
+      });
+  }
+
   function getPartnerstackClickId() {
     const candidates = [];
 
@@ -540,6 +589,10 @@
         localStorage.setItem(PARTNERSTACK_FIELD_NAME, partnerstackId);
       } catch (e) {
         log('Failed to persist partnerstack id in localStorage:', e);
+      }
+
+      if (options.formGuid && options.portalId) {
+        submitPartnerstackToHubSpot(options.formGuid, options.portalId, partnerstackId, formData.email);
       }
     }
 
@@ -916,8 +969,44 @@
       const msgType = payload && (payload.type || payload.messageType);
       const eventName = payload && payload.eventName;
 
-      // Check for standard form submission event
+      // Inject PartnerStack ID when form is ready
       if (
+        payload &&
+        msgType === 'hsFormCallback' &&
+        eventName === 'onFormReady'
+      ) {
+        log('Form ready event detected, injecting PartnerStack ID');
+        const partnerstackId = getPartnerstackClickId();
+        if (partnerstackId) {
+          setTimeout(() => {
+            const inputs = document.querySelectorAll(
+              'input[name="partnerstack_click_id"], input[name$="/partnerstack_click_id"]'
+            );
+            inputs.forEach((input) => {
+              if (input && !input.value) {
+                input.value = partnerstackId;
+                try {
+                  input.setAttribute('value', partnerstackId);
+                  const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+                    window.HTMLInputElement.prototype,
+                    'value'
+                  ).set;
+                  nativeInputValueSetter.call(input, partnerstackId);
+                  const event = new Event('input', { bubbles: true });
+                  input.dispatchEvent(event);
+                  const changeEvent = new Event('change', { bubbles: true });
+                  input.dispatchEvent(changeEvent);
+                  log('Injected PartnerStack ID into form field:', input.name, '=', partnerstackId);
+                } catch (e) {
+                  log('Failed to trigger events on form ready:', e);
+                }
+              }
+            });
+          }, 100);
+        }
+      }
+      // Check for standard form submission event
+      else if (
         payload &&
         msgType === 'hsFormCallback' &&
         (eventName === 'onFormSubmitted' || eventName === 'onFormSubmit')
@@ -948,7 +1037,12 @@
           log('Failed to persist merged submission data globally:', e);
         }
 
-        handleFormSubmission(mergedData, options);
+        const submissionOptions = {
+          ...options,
+          formGuid: payload.data?.formGuid || payload.formGuid,
+          portalId: payload.data?.portalId || payload.portalId
+        };
+        handleFormSubmission(mergedData, submissionOptions);
       }
       // Check for developer embed submission (accepted: true)
       else if (payload && payload.formGuid && payload.accepted === true) {
@@ -971,7 +1065,12 @@
             log('Failed to store captured form data in localStorage:', e);
           }
 
-          handleFormSubmission(window._capturedFormData, options);
+          const submissionOptions = {
+            ...options,
+            formGuid: payload.formGuid,
+            portalId: payload.portalId
+          };
+          handleFormSubmission(window._capturedFormData, submissionOptions);
         }
       } else if (payload && msgType === 'hsFormCallback' && DEBUG) {
         // Helpful debug for other HS callbacks (ready, inlineMessage, etc.)
