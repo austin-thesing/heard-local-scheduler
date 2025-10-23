@@ -206,6 +206,10 @@ function init() {
   }, 3000); // Backup for slower-loading forms
 }
 
+// Expose functions globally for the form-handler interface
+window.getPartnerStackId = getPartnerStackId;
+window.injectPartnerStackId = injectPartnerStackId;
+
 // Run initialization
 console.log(
   '[PartnerStack] Checking DOM readyState for initialization:',
