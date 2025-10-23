@@ -3,6 +3,6 @@
   "private": true,
   "version": "0.0.0",
   "scripts": {
-    "build": "rm -rf dist && bun build hubspot-form-router.js wf-scheduler-injection.js form.css --outdir=dist --minify"
+    "build": "rm -rf dist && bun build hubspot-form-router.js wf-scheduler-injection.js form.css --outdir=dist --minify && bun build form-handler.js --outdir=dist --minify"
   }
 }

@@ -122,131 +122,6 @@
     return null;
   }
 
-  function populatePartnerstackFields(partnerstackId) {
-    if (!partnerstackId) return;
-
-    const selectorParts = PARTNERSTACK_STORAGE_KEYS.flatMap((key) => [
-      `input[name="${key}"]`,
-      `input[name$="/${key}"]`,
-    ]);
-
-    if (selectorParts.length === 0) return;
-
-    let inputs;
-    try {
-      inputs = document.querySelectorAll(selectorParts.join(', '));
-      log(
-        'PartnerStack selector found',
-        inputs.length,
-        'inputs:',
-        selectorParts.join(', ')
-      );
-    } catch (e) {
-      log('Failed to query partnerstack inputs:', e);
-      return;
-    }
-
-    if (!inputs || inputs.length === 0) {
-      log(
-        'No PartnerStack inputs found with selectors:',
-        selectorParts.join(', ')
-      );
-      return;
-    }
-
-    window._capturedFormData = window._capturedFormData || {};
-
-    inputs.forEach((input) => {
-      if (!input || typeof input.name !== 'string') return;
-
-      const originalValue = input.value;
-      if (!input.value) {
-        input.value = partnerstackId;
-        
-        try {
-          input.setAttribute('value', partnerstackId);
-          
-          const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-            window.HTMLInputElement.prototype,
-            'value'
-          ).set;
-          nativeInputValueSetter.call(input, partnerstackId);
-          
-          const event = new Event('input', { bubbles: true });
-          input.dispatchEvent(event);
-          const changeEvent = new Event('change', { bubbles: true });
-          input.dispatchEvent(changeEvent);
-        } catch (e) {
-          log('Failed to trigger input events:', e);
-        }
-      }
-
-      window._capturedFormData[input.name] = input.value;
-
-      const canonicalName = canonicalKey(input.name);
-      if (canonicalName && canonicalName !== input.name) {
-        window._capturedFormData[canonicalName] = input.value;
-      }
-
-      log(
-        'Prefilled partnerstack id field:',
-        input.name,
-        '=',
-        input.value,
-        originalValue ? `(overwrote: ${originalValue})` : '(was empty)'
-      );
-    });
-  }
-
-  function submitPartnerstackToHubSpot(formGuid, portalId, partnerstackId, email) {
-    if (!formGuid || !portalId || !partnerstackId) {
-      log('Missing required data for HubSpot submission');
-      return;
-    }
-
-    const updateUrl = `https://api.hsforms.com/submissions/v3/integration/submit/${portalId}/${formGuid}`;
-    
-    const updatePayload = {
-      fields: [
-        {
-          name: 'partnerstack_click_id',
-          value: partnerstackId
-        }
-      ],
-      context: {
-        pageUri: window.location.href,
-        pageName: document.title
-      }
-    };
-
-    if (email) {
-      updatePayload.fields.push({
-        name: 'email',
-        value: email
-      });
-    }
-
-    log('Submitting PartnerStack ID to HubSpot:', updatePayload);
-
-    fetch(updateUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(updatePayload),
-    })
-      .then((response) => {
-        if (response.ok) {
-          log('Successfully submitted PartnerStack ID to HubSpot');
-        } else {
-          log('Failed to submit PartnerStack ID to HubSpot:', response.status);
-        }
-      })
-      .catch((error) => {
-        log('Error submitting PartnerStack ID to HubSpot:', error);
-      });
-  }
-
   function getPartnerstackClickId() {
     const candidates = [];
 
@@ -260,7 +135,10 @@
 
     try {
       if (window.partnerstack && window.partnerstack.ps_xid) {
-        log('Found PartnerStack ID in window.partnerstack:', window.partnerstack.ps_xid);
+        log(
+          'Found PartnerStack ID in window.partnerstack:',
+          window.partnerstack.ps_xid
+        );
         candidates.push(window.partnerstack.ps_xid);
       }
     } catch (e) {
@@ -302,7 +180,10 @@
 
     const partnerstackCookie = getCookieValue(PARTNERSTACK_FIELD_NAME);
     if (partnerstackCookie && !candidates.includes(partnerstackCookie)) {
-      log('Found PartnerStack ID in partnerstack_click_id cookie:', partnerstackCookie);
+      log(
+        'Found PartnerStack ID in partnerstack_click_id cookie:',
+        partnerstackCookie
+      );
       candidates.push(partnerstackCookie);
     }
 
@@ -311,7 +192,7 @@
     const resolved = candidates.find(
       (value) => value && value !== 'undefined' && value !== 'null'
     );
-    
+
     log('Resolved PartnerStack ID:', resolved);
     return resolved || null;
   }
@@ -576,7 +457,7 @@
       formData['0-1/partnerstack_click_id'] = partnerstackId;
       formData['0-2/partnerstack_click_id'] = partnerstackId;
       formData['0-3/partnerstack_click_id'] = partnerstackId;
-      
+
       log('Injected PartnerStack ID into submission:', partnerstackId);
 
       try {
@@ -589,10 +470,6 @@
         localStorage.setItem(PARTNERSTACK_FIELD_NAME, partnerstackId);
       } catch (e) {
         log('Failed to persist partnerstack id in localStorage:', e);
-      }
-
-      if (options.formGuid && options.portalId) {
-        submitPartnerstackToHubSpot(options.formGuid, options.portalId, partnerstackId, formData.email);
       }
     }
 
@@ -741,10 +618,7 @@
 
     // Monitor form inputs using MutationObserver
     function monitorFormInputs() {
-      const partnerstackCookieId = getPartnerstackClickId();
-      if (partnerstackCookieId) {
-        populatePartnerstackFields(partnerstackCookieId);
-      }
+      // PartnerStack field injection handled by cookie-helper-hs.js
 
       const observer = new MutationObserver((mutations) => {
         // Process only new nodes, not all inputs every time
@@ -789,33 +663,7 @@
         // Skip readonly inputs UNLESS they're hidden
         if (input.readOnly && input.type !== 'hidden') return;
 
-        const inputCanonicalName = input.name ? canonicalKey(input.name) : '';
-
-        if (
-          input.name === PARTNERSTACK_FIELD_NAME ||
-          inputCanonicalName === PARTNERSTACK_FIELD_NAME ||
-          input.name.endsWith('/' + PARTNERSTACK_FIELD_NAME)
-        ) {
-          const partnerstackId = getPartnerstackClickId();
-          if (partnerstackId && !input.value) {
-            input.value = partnerstackId;
-            try {
-              input.setAttribute('value', partnerstackId);
-              const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-                window.HTMLInputElement.prototype,
-                'value'
-              ).set;
-              nativeInputValueSetter.call(input, partnerstackId);
-              const event = new Event('input', { bubbles: true });
-              input.dispatchEvent(event);
-              const changeEvent = new Event('change', { bubbles: true });
-              input.dispatchEvent(changeEvent);
-            } catch (e) {
-              log('Failed to trigger events on partnerstack field:', e);
-            }
-            captureValue(input, 'partnerstack_prefill');
-          }
-        }
+        // PartnerStack field injection handled by cookie-helper-hs.js
 
         // For hidden inputs, monitor value changes directly
         if (input.type === 'hidden' && input.name) {
@@ -835,32 +683,8 @@
           // Capture initial value
           if (input.value) {
             captureValue(input, 'initial');
-          } else {
-            const partnerstackId = getPartnerstackClickId();
-            if (
-              partnerstackId &&
-              (input.name === PARTNERSTACK_FIELD_NAME ||
-                canonicalKey(input.name) === PARTNERSTACK_FIELD_NAME ||
-                input.name.endsWith('/' + PARTNERSTACK_FIELD_NAME))
-            ) {
-              input.value = partnerstackId;
-              try {
-                input.setAttribute('value', partnerstackId);
-                const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-                  window.HTMLInputElement.prototype,
-                  'value'
-                ).set;
-                nativeInputValueSetter.call(input, partnerstackId);
-                const event = new Event('input', { bubbles: true });
-                input.dispatchEvent(event);
-                const changeEvent = new Event('change', { bubbles: true });
-                input.dispatchEvent(changeEvent);
-              } catch (e) {
-                log('Failed to trigger events on hidden partnerstack field:', e);
-              }
-              captureValue(input, 'partnerstack_prefill_hidden');
-            }
           }
+          // PartnerStack field injection handled by cookie-helper-hs.js
         }
         // For radio buttons
         else if (input.type === 'radio') {
@@ -969,44 +793,8 @@
       const msgType = payload && (payload.type || payload.messageType);
       const eventName = payload && payload.eventName;
 
-      // Inject PartnerStack ID when form is ready
-      if (
-        payload &&
-        msgType === 'hsFormCallback' &&
-        eventName === 'onFormReady'
-      ) {
-        log('Form ready event detected, injecting PartnerStack ID');
-        const partnerstackId = getPartnerstackClickId();
-        if (partnerstackId) {
-          setTimeout(() => {
-            const inputs = document.querySelectorAll(
-              'input[name="partnerstack_click_id"], input[name$="/partnerstack_click_id"]'
-            );
-            inputs.forEach((input) => {
-              if (input && !input.value) {
-                input.value = partnerstackId;
-                try {
-                  input.setAttribute('value', partnerstackId);
-                  const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-                    window.HTMLInputElement.prototype,
-                    'value'
-                  ).set;
-                  nativeInputValueSetter.call(input, partnerstackId);
-                  const event = new Event('input', { bubbles: true });
-                  input.dispatchEvent(event);
-                  const changeEvent = new Event('change', { bubbles: true });
-                  input.dispatchEvent(changeEvent);
-                  log('Injected PartnerStack ID into form field:', input.name, '=', partnerstackId);
-                } catch (e) {
-                  log('Failed to trigger events on form ready:', e);
-                }
-              }
-            });
-          }, 100);
-        }
-      }
       // Check for standard form submission event
-      else if (
+      if (
         payload &&
         msgType === 'hsFormCallback' &&
         (eventName === 'onFormSubmitted' || eventName === 'onFormSubmit')
@@ -1040,7 +828,7 @@
         const submissionOptions = {
           ...options,
           formGuid: payload.data?.formGuid || payload.formGuid,
-          portalId: payload.data?.portalId || payload.portalId
+          portalId: payload.data?.portalId || payload.portalId,
         };
         handleFormSubmission(mergedData, submissionOptions);
       }
@@ -1068,7 +856,7 @@
           const submissionOptions = {
             ...options,
             formGuid: payload.formGuid,
-            portalId: payload.portalId
+            portalId: payload.portalId,
           };
           handleFormSubmission(window._capturedFormData, submissionOptions);
         }
