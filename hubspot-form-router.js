@@ -929,7 +929,7 @@
           typeof window._capturedFormData === 'object'
             ? window._capturedFormData
             : {};
-        const mergedData = { ...capturedData, ...submissionData };
+        const mergedData = { ...submissionData, ...capturedData };
 
         if (!hasRoutingData(mergedData)) {
           if (eventName === 'onFormSubmit') {
