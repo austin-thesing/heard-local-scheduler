@@ -197,10 +197,11 @@ function setupHubSpotListener() {
   XMLHttpRequest.prototype.send = function(data) {
     // Check if this is a HubSpot form submission
     if (this._url && (this._url.includes('forms.hubspot.com') || this._url.includes('hsforms.com'))) {
-      console.log('[PartnerStack] Intercepted HubSpot form submission');
+      console.log('[PartnerStack] Intercepted HubSpot form submission to:', this._url);
       const psXid = getPartnerStackId();
       
       if (psXid && data) {
+        console.log('[PartnerStack] Original submission data:', data);
         try {
           // Try to parse and modify the submission data
           if (typeof data === 'string') {
@@ -210,10 +211,18 @@ function setupHubSpotListener() {
               if (!data.includes('partnerstack_click_id=')) {
                 data += '&partnerstack_click_id=' + encodeURIComponent(psXid);
                 console.log('[PartnerStack] Added PartnerStack ID to URL-encoded submission');
+                console.log('[PartnerStack] Modified data now includes: partnerstack_click_id=' + psXid);
               } else if (data.includes('partnerstack_click_id=&') || data.endsWith('partnerstack_click_id=')) {
                 // Field exists but is empty, replace it
                 data = data.replace(/partnerstack_click_id=[^&]*/, 'partnerstack_click_id=' + encodeURIComponent(psXid));
                 console.log('[PartnerStack] Replaced empty PartnerStack ID in submission');
+                console.log('[PartnerStack] Modified data now includes: partnerstack_click_id=' + psXid);
+              } else {
+                // Field exists with a value, check if it's correct
+                const match = data.match(/partnerstack_click_id=([^&]*)/);
+                if (match && match[1]) {
+                  console.log('[PartnerStack] PartnerStack ID already in submission:', decodeURIComponent(match[1]));
+                }
               }
             }
             // JSON data
@@ -229,6 +238,7 @@ function setupHubSpotListener() {
                   }
                   data = JSON.stringify(jsonData);
                   console.log('[PartnerStack] Added PartnerStack ID to JSON submission');
+                  console.log('[PartnerStack] Modified JSON data:', jsonData);
                 }
               } catch (e) {
                 console.log('[PartnerStack] Could not parse JSON data:', e);
@@ -241,9 +251,18 @@ function setupHubSpotListener() {
               console.log('[PartnerStack] Added PartnerStack ID to FormData submission');
             }
           }
-        } catch (e) {
+          } catch (e) {
           console.warn('[PartnerStack] Error modifying submission data:', e);
         }
+        console.log('[PartnerStack] Final submission data being sent:', data);
+        // Store for debugging
+        if (window.PartnerStackDebug) {
+          window.PartnerStackDebug.lastSubmission = data;
+          window.PartnerStackDebug.submissionCount++;
+          window.PartnerStackDebug.partnerStackId = psXid;
+        }
+      } else {
+        console.log('[PartnerStack] No PartnerStack ID available to add to submission');
       }
     }
     
@@ -473,6 +492,19 @@ function setupFormSubmitInterceptor() {
 // Expose functions globally for the form-handler interface
 window.getPartnerStackId = getPartnerStackId;
 window.injectPartnerStackId = injectPartnerStackId;
+
+// Expose submission tracking for debugging
+window.PartnerStackDebug = {
+  lastSubmission: null,
+  submissionCount: 0,
+  getLastSubmission: function() {
+    return this.lastSubmission;
+  },
+  wasPartnerStackIncluded: function() {
+    if (!this.lastSubmission) return false;
+    return this.lastSubmission.includes('partnerstack_click_id') && !this.lastSubmission.includes('partnerstack_click_id=&');
+  }
+};
 
 // Run initialization
 console.log(
