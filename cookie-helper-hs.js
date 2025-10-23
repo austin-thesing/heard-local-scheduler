@@ -402,6 +402,12 @@ function setupFormSubmitInterceptor() {
   
   // Monitor for form submit events using capture phase
   document.addEventListener('submit', function(e) {
+    // Check if we've already processed this form submission
+    if (e.target.dataset.partnerStackProcessed === 'true') {
+      console.log('[PartnerStack] Form already processed, allowing submission');
+      return; // Let it submit normally
+    }
+    
     console.log('[PartnerStack] Form submit event captured');
     const psXid = getPartnerStackId();
     
@@ -411,24 +417,21 @@ function setupFormSubmitInterceptor() {
                           e.target.id.includes('hsForm');
     
     if (psXid && isHubSpotForm) {
-      // Prevent default submission briefly
-      e.preventDefault();
-      e.stopPropagation();
+      // Mark form as processed to prevent loop
+      e.target.dataset.partnerStackProcessed = 'true';
       
-      console.log('[PartnerStack] Delaying HubSpot form submission to inject PartnerStack ID');
+      console.log('[PartnerStack] Injecting PartnerStack ID before submission');
       
       // Re-inject the value right before submission
       const inputs = e.target.querySelectorAll('input[name*="partnerstack"], input[name="ps_xid"]');
-      let injected = false;
       
       inputs.forEach(function(input) {
         if (input.name.includes('partnerstack_click_id') || input.name === 'ps_xid') {
-          console.log('[PartnerStack] Force-injecting value for field:', input.name, 'with value:', psXid);
+          console.log('[PartnerStack] Injecting value for field:', input.name, 'with value:', psXid);
           input.value = psXid;
           input.setAttribute('value', psXid);
-          injected = true;
           
-          // Force the value using defineProperty to make it stick
+          // Force the value using native setter
           try {
             const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
             if (descriptor && descriptor.set) {
@@ -443,23 +446,8 @@ function setupFormSubmitInterceptor() {
       // Store globally for XHR interceptor
       window._forcePartnerStackId = psXid;
       
-      // Resubmit the form after a small delay
-      setTimeout(function() {
-        console.log('[PartnerStack] Re-submitting form with PartnerStack ID injected');
-        
-        // Try multiple submission methods
-        if (e.target.requestSubmit) {
-          e.target.requestSubmit();
-        } else if (e.target.submit) {
-          e.target.submit();
-        } else {
-          // Trigger submit button click
-          const submitBtn = e.target.querySelector('input[type="submit"], button[type="submit"]');
-          if (submitBtn) submitBtn.click();
-        }
-      }, 100);
-      
-      return false;
+      // Don't prevent submission, just let it continue with our injected value
+      console.log('[PartnerStack] Allowing form submission with injected PartnerStack ID');
     }
   }, true); // Use capture phase to run before HubSpot's handlers
   
