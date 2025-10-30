@@ -819,11 +819,11 @@
       }
       return;
     }
-    
+
     if (DEBUG) {
       log('Multistep completion check: Checking for thank you message...', {
         hasFormData: !!window._capturedFormData,
-        formDataKeys: Object.keys(window._capturedFormData).length
+        formDataKeys: Object.keys(window._capturedFormData).length,
       });
     }
 
@@ -845,28 +845,30 @@
             element.innerText ||
             ''
           ).toLowerCase();
-            if (
-              text.includes('thank') ||
-              text.includes('submitted') ||
-              text.includes('success')
-            ) {
-              log('Multistep form completion detected via thank you message');
-              console.log('[HubSpot Router] Thank you message found', {
-                selector: selector,
-                text: text.substring(0, 100),
-                hasRoutingData: hasRoutingData(window._capturedFormData)
-              });
+          if (
+            text.includes('thank') ||
+            text.includes('submitted') ||
+            text.includes('success')
+          ) {
+            log('Multistep form completion detected via thank you message');
+            console.log('[HubSpot Router] Thank you message found', {
+              selector: selector,
+              text: text.substring(0, 100),
+              hasRoutingData: hasRoutingData(window._capturedFormData),
+            });
 
-              // Verify we have routing data
-              if (hasRoutingData(window._capturedFormData)) {
-                log('Triggering redirect from multistep fallback');
-                console.log('[HubSpot Router] Executing redirect via fallback');
-                handleFormSubmission(window._capturedFormData);
-              } else {
-                console.warn('[HubSpot Router] Thank you found but no routing data available');
-              }
-              return;
+            // Verify we have routing data
+            if (hasRoutingData(window._capturedFormData)) {
+              log('Triggering redirect from multistep fallback');
+              console.log('[HubSpot Router] Executing redirect via fallback');
+              handleFormSubmission(window._capturedFormData);
+            } else {
+              console.warn(
+                '[HubSpot Router] Thank you found but no routing data available'
+              );
             }
+            return;
+          }
         }
       } catch (e) {
         // Ignore selector errors
@@ -941,16 +943,22 @@
             // For multistep forms, set up fallback check after a delay
             // This ensures single-step forms aren't affected (they'll get onFormSubmitted quickly)
             if (!MULTISTEP_FALLBACK_TIMER) {
-              console.log('[HubSpot Router] Setting up multistep fallback timer');
+              console.log(
+                '[HubSpot Router] Setting up multistep fallback timer'
+              );
               MULTISTEP_FALLBACK_TIMER = setTimeout(() => {
-                console.log('[HubSpot Router] Starting multistep completion checks');
+                console.log(
+                  '[HubSpot Router] Starting multistep completion checks'
+                );
                 // Check every 500ms for up to 5 seconds after onFormSubmit
                 let checks = 0;
                 const maxChecks = 10;
                 const checkInterval = setInterval(() => {
                   checks++;
                   if (DEBUG || checks === 1 || checks === maxChecks) {
-                    console.log(`[HubSpot Router] Multistep check ${checks}/${maxChecks}`);
+                    console.log(
+                      `[HubSpot Router] Multistep check ${checks}/${maxChecks}`
+                    );
                   }
                   checkForMultistepCompletion();
 
@@ -958,7 +966,9 @@
                     clearInterval(checkInterval);
                     MULTISTEP_FALLBACK_TIMER = null;
                     if (checks >= maxChecks) {
-                      console.warn('[HubSpot Router] Multistep fallback checks completed without redirect');
+                      console.warn(
+                        '[HubSpot Router] Multistep fallback checks completed without redirect'
+                      );
                     }
                   }
                 }, 500);
@@ -1071,11 +1081,11 @@
   };
 
   log('HubSpot Form Router loaded');
-  
+
   // Always log router load (even without debug mode) for troubleshooting
   console.log('[HubSpot Router] Script loaded', {
     debug: DEBUG,
     hasRouter: !!window.HubSpotRouter,
-    url: window.location.href
+    url: window.location.href,
   });
 })();
