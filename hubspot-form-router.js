@@ -227,6 +227,7 @@
 
   // Ensure we only route once per page load
   let HAS_ROUTED = false;
+  let MULTISTEP_FALLBACK_TIMER = null;
 
   // Normalize HubSpot payloads and raw form objects into a flat key/value map
   function canonicalKey(key) {
@@ -795,6 +796,67 @@
   }
 
   /**
+   * Fallback for multistep forms: detect thank you message and redirect
+   * Only activates if normal submission flow didn't work
+   */
+  function checkForMultistepCompletion() {
+    // Don't interfere if routing already happened
+    if (HAS_ROUTED) {
+      if (MULTISTEP_FALLBACK_TIMER) {
+        clearTimeout(MULTISTEP_FALLBACK_TIMER);
+        MULTISTEP_FALLBACK_TIMER = null;
+      }
+      return;
+    }
+
+    // Check if we have captured form data
+    if (
+      !window._capturedFormData ||
+      Object.keys(window._capturedFormData).length === 0
+    ) {
+      return;
+    }
+
+    // Look for HubSpot thank you message
+    const thankYouSelectors = [
+      '.submitted-message',
+      '.hs_submit_success',
+      '.hs-form-success',
+      '[data-submitted-message]',
+      '.submitted-message-content',
+    ];
+
+    for (const selector of thankYouSelectors) {
+      try {
+        const element = document.querySelector(selector);
+        if (element) {
+          const text = (
+            element.textContent ||
+            element.innerText ||
+            ''
+          ).toLowerCase();
+          if (
+            text.includes('thank') ||
+            text.includes('submitted') ||
+            text.includes('success')
+          ) {
+            log('Multistep form completion detected via thank you message');
+
+            // Verify we have routing data
+            if (hasRoutingData(window._capturedFormData)) {
+              log('Triggering redirect from multistep fallback');
+              handleFormSubmission(window._capturedFormData);
+            }
+            return;
+          }
+        }
+      } catch (e) {
+        // Ignore selector errors
+      }
+    }
+  }
+
+  /**
    * PostMessage event listener for HubSpot form submissions
    */
   function initPostMessageListener(options = {}) {
@@ -858,10 +920,34 @@
             log(
               'onFormSubmit received without routing fields; waiting for onFormSubmitted event'
             );
+            // For multistep forms, set up fallback check after a delay
+            // This ensures single-step forms aren't affected (they'll get onFormSubmitted quickly)
+            if (!MULTISTEP_FALLBACK_TIMER) {
+              MULTISTEP_FALLBACK_TIMER = setTimeout(() => {
+                // Check every 500ms for up to 5 seconds after onFormSubmit
+                let checks = 0;
+                const maxChecks = 10;
+                const checkInterval = setInterval(() => {
+                  checks++;
+                  checkForMultistepCompletion();
+
+                  if (HAS_ROUTED || checks >= maxChecks) {
+                    clearInterval(checkInterval);
+                    MULTISTEP_FALLBACK_TIMER = null;
+                  }
+                }, 500);
+              }, 1000); // Wait 1 second before starting checks
+            }
           } else {
             log('Submission payload lacks routing data; skipping redirect');
           }
           return;
+        }
+
+        // Clear fallback timer since we got the proper event
+        if (MULTISTEP_FALLBACK_TIMER) {
+          clearTimeout(MULTISTEP_FALLBACK_TIMER);
+          MULTISTEP_FALLBACK_TIMER = null;
         }
 
         try {
@@ -882,6 +968,12 @@
           window._capturedFormData &&
           Object.keys(window._capturedFormData).length > 0
         ) {
+          // Clear fallback timer
+          if (MULTISTEP_FALLBACK_TIMER) {
+            clearTimeout(MULTISTEP_FALLBACK_TIMER);
+            MULTISTEP_FALLBACK_TIMER = null;
+          }
+
           // Also store captured form data in localStorage for prefill
           try {
             localStorage.setItem(
